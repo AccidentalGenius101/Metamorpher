@@ -228,6 +228,21 @@ class ControllerThreeWayTests(unittest.TestCase):
         self.assertIn(decision.action_id, decision.frontier)
         self.assertEqual(decision.domain, DOMAIN)
 
+    def test_observation_kind_alone_does_not_imply_refinement(self) -> None:
+        graph = TypedActionGraph()
+        graph.add_node(
+            ActionNode(
+                "inspect_fasteners",
+                "Inspect manifold fasteners",
+                ActionKind.OBSERVE,
+            )
+        )
+        controller = MetamorpherController(graph, default_domain=DOMAIN)
+        decision = controller.next()
+        self.assertEqual(decision.status, DecisionStatus.SUPPORTED_UNDER_MODEL)
+        self.assertEqual(decision.action_id, "inspect_fasteners")
+        self.assertIsNone(decision.probe_id)
+
     def test_unknown_guard_issues_targeted_refinement(self) -> None:
         controller = MetamorpherController(refinement_graph(), default_domain=DOMAIN)
         decision = controller.next()

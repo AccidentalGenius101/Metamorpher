@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Distinguished ordinary supported observation actions from probes required to
+  resolve an explicit uncertainty; action kind alone no longer forces a
+  `refinement_required` decision.
 - Added an attributable text-interpreter adapter with exact source spans and a
   deterministic, model-relative decision renderer.
 - Connected raw perception, domain evidence ingestion, capsule retrieval, and

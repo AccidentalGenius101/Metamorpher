@@ -31,7 +31,6 @@ from .evidence import EvidenceLedger
 from .graph import FrontierResult, TypedActionGraph
 from .memory import DomainMemory
 from .model import (
-    ActionKind,
     ActionNode,
     ActionStatus,
     Constraint,
@@ -100,15 +99,6 @@ class MetamorpherController:
     ``Observation.independent_audit`` flag is true.  The library accepts no
     hidden-state, oracle-frontier, or post-hoc validity field.
     """
-
-    _REFINEMENT_KINDS = frozenset(
-        {
-            ActionKind.OBSERVE,
-            ActionKind.TEST,
-            ActionKind.AUDIT,
-            ActionKind.ESCALATE,
-        }
-    )
 
     def __init__(
         self,
@@ -348,11 +338,8 @@ class MetamorpherController:
         action_id: str,
         required_probes: dict[str, tuple[str, ...]],
     ) -> bool:
-        node = self.graph.nodes[action_id]
         return bool(
-            action_id in required_probes
-            or node.probe_for
-            or node.kind in self._REFINEMENT_KINDS
+            action_id in required_probes or self.graph.nodes[action_id].probe_for
         )
 
     def _make_decision(

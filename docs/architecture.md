@@ -62,6 +62,10 @@ For each pending action, the graph returns one of three structural positions:
 
 Here, `certified` is an internal graph term. A public decision is named
 `supported_under_model` to avoid implying external safety certification.
+An observation or test is still a supported action when it is simply the next
+admissible step. It becomes `refinement_required` only when represented as a
+probe for a currently unresolved condition; action kind alone does not imply
+epistemic blockage.
 
 ### 4. Decision value
 
