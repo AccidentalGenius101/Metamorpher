@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this experimental software, cite the repository and version."
+title: "Metamorpher Control"
+type: software
+version: 0.1.0
+date-released: 2026-08-28
+authors:
+  - family-names: Aubin-Moreau
+    given-names: Gabriel
+repository-code: "https://github.com/AccidentalGenius101/metamorpher-control"
+license: Apache-2.0
