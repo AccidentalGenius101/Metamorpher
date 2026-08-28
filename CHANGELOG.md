@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Restored qualified, frozen primitive composition with contributor-set routing
+  and append-only local primitive growth from the original Metamorpher design.
 - Added a fail-closed, line-oriented text-program compiler for generative model
   proposals, with exact quotation and action-reference validation.
 - Added a one-pass discourse boundary that separates span-grounded evidence

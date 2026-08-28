@@ -258,6 +258,17 @@ rejects unknown operations, invented or ambiguous quotations, invalid enums,
 and dangling action references before producing ordinary quarantined
 Metamorpher objects. A malformed line cannot partially mutate controller state.
 
+## Qualified primitive composition
+
+The original Metamorpher contributor-set design is represented by
+`PrimitiveRegistry`, `ContributorRouter`, and `PrimitiveComposer`. A router
+selects named primitive calls and their local arguments; qualified, frozen
+implementations perform the structural operations. Unknown or unqualified
+contributors fail before controller mutation. Installed primitives cannot be
+rewritten: continual learning appends a newly qualified primitive while prior
+records and behavior remain unchanged. `PrimitiveDiscourseInterpreter` connects
+this execution path to the ordinary discourse quarantine.
+
 This outer loop is an integration contract, not a claim that the reference
 package already solves perception, ontology induction, causal discovery, or
 calibrated structural learning. Implementations remain independently testable
