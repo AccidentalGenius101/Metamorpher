@@ -187,6 +187,29 @@ core depending on an SDK:
 The core has no network dependency. An adapter should be removable without
 changing graph, evidence, or decision semantics.
 
+## Developmental outer loop
+
+The control kernel can be composed with learning systems without granting them
+execution authority. The public interfaces in `metamorpher.cognition` separate:
+
+- `Perceiver`: raw external input to provenance-bearing observations;
+- `Proposer`: observations and memory to quarantined candidate structure;
+- `Discriminator`: an unresolved cell to a represented informative probe;
+- `StructureLearner`: committed outcomes to evidence-grounded revisions;
+- `ActionExecutor`: a committed abstract action to an external result;
+- `CapsuleStore`: domain-bounded reusable constraints and hypotheses.
+
+`CognitiveLoop` is the minimal reference composition. It binds executor output
+to the committed decision token and applies learned revisions atomically with
+their supporting observations. `install_candidates` accepts only constraints
+tagged `candidate`; a proposer cannot promote its own output to supported or
+external-policy structure.
+
+This outer loop is an integration contract, not a claim that the reference
+package already solves perception, ontology induction, causal discovery, or
+calibrated structural learning. Implementations remain independently testable
+and replaceable around the controller's admissibility invariants.
+
 ## What the architecture cannot infer automatically
 
 The controller cannot guarantee that its graph contains every real prerequisite

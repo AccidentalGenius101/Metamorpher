@@ -275,6 +275,13 @@ solve:
 An LLM may propose candidate nodes, edges, tests, or scores through an adapter,
 but those proposals are untrusted inputs to the controller.
 
+The package now exposes a developmental outer-loop contract for perception,
+candidate structure proposal, discriminating probes, evidence-grounded
+structure learning, external execution, and domain-bounded structural capsules.
+`CognitiveLoop` provides a minimal reference composition while keeping proposed
+constraints quarantined and the controller's commit boundary intact. See the
+"Developmental outer loop" section of [`docs/architecture.md`](docs/architecture.md).
+
 ## Develop
 
 The complete behavioral suite runs with the standard library:
