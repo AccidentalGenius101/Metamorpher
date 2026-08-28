@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -121,6 +122,54 @@ class VersionSpaceManager:
         if domain is not None and domain in self._active_by_domain:
             return self.cells.get(self._active_by_domain[domain])
         return self.active
+
+    @staticmethod
+    def _hypothesis_snapshot(hypothesis: Hypothesis) -> tuple[Any, ...]:
+        return (
+            hypothesis.id,
+            tuple(sorted(hypothesis.safe_actions)),
+            tuple(
+                sorted(
+                    (str(key), repr(value))
+                    for key, value in hypothesis.predictions.items()
+                )
+            ),
+            repr(hypothesis.domain),
+            tuple(hypothesis.provenance),
+        )
+
+    def digest(self, domain: DomainTag | None = None) -> str:
+        """Hash the complete active epistemic state for certificate binding."""
+
+        cell = self.active_for(domain)
+        if cell is None:
+            snapshot: tuple[Any, ...] = ("no-active-cell", repr(domain))
+        else:
+            snapshot = (
+                cell.id,
+                cell.status.value,
+                cell.parent_id,
+                cell.min_resolution_support,
+                tuple(
+                    sorted(
+                        self._hypothesis_snapshot(hypothesis)
+                        for hypothesis in cell.hypotheses.values()
+                    )
+                ),
+                tuple(
+                    sorted(
+                        self._hypothesis_snapshot(hypothesis)
+                        for hypothesis in cell._original_hypotheses.values()
+                    )
+                ),
+                tuple(
+                    (test_id, repr(value), evidence_id)
+                    for test_id, value, evidence_id in cell.observations
+                ),
+                tuple(sorted(cell.evidence_ids)),
+                repr(domain),
+            )
+        return hashlib.sha256(repr(snapshot).encode("utf-8")).hexdigest()
 
     @staticmethod
     def _cell_domain(cell: UnresolvedCell) -> DomainTag | None:

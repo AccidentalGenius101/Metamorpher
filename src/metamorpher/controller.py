@@ -365,6 +365,7 @@ class MetamorpherController:
         unresolved: Iterable[str] = (),
     ) -> Decision:
         self._sequence += 1
+        version_space_digest = self.version_space.digest(domain)
         token = decision_token(
             sequence=self._sequence,
             graph_epoch=self.graph.epoch,
@@ -374,6 +375,7 @@ class MetamorpherController:
             action_id=action_id,
             probe_id=probe_id,
             frontier=frontier,
+            version_space_digest=version_space_digest,
         )
         selected = action_id or probe_id
         support = (
@@ -396,6 +398,7 @@ class MetamorpherController:
             supporting_evidence_ids=support,
             represented_hypotheses=represented_hypotheses,
             common_safe_actions=tuple(sorted(common_safe)),
+            version_space_digest=version_space_digest,
         )
 
     def _abstain(
@@ -556,7 +559,7 @@ class MetamorpherController:
         return self._issued
 
     def _revalidate_permission(self, decision: Decision) -> str:
-        assert_fresh(decision, self.graph, self.evidence)
+        assert_fresh(decision, self.graph, self.evidence, self.version_space)
         if decision.status == DecisionStatus.ABSTAIN:
             raise UnsafeExecutionError("an abstention cannot be committed")
         selected = decision.action_id or decision.probe_id
@@ -710,7 +713,12 @@ class MetamorpherController:
                 committed = self._committed
                 if supplied_token != committed.decision.token:
                     raise StaleDecisionError("observation token is stale")
-                assert_fresh(committed.decision, self.graph, self.evidence)
+                assert_fresh(
+                    committed.decision,
+                    self.graph,
+                    self.evidence,
+                    self.version_space,
+                )
                 wrong_domains = tuple(
                     item.id
                     for item in observation_batch

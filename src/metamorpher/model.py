@@ -160,6 +160,7 @@ class Decision:
     supporting_evidence_ids: tuple[str, ...] = ()
     represented_hypotheses: tuple[str, ...] = ()
     common_safe_actions: tuple[str, ...] = ()
+    version_space_digest: str = ""
 
 
 class MetamorpherError(RuntimeError):

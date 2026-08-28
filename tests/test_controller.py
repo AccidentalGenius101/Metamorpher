@@ -331,6 +331,39 @@ class ControllerFreshnessAndObservationTests(unittest.TestCase):
         with self.assertRaises(StaleDecisionError):
             controller.commit(decision)
 
+    def test_hypothesis_replacement_invalidates_issued_certificate(self) -> None:
+        manager = VersionSpaceManager()
+        manager.add(
+            UnresolvedCell(
+                "cell",
+                {
+                    "h": Hypothesis(
+                        "h",
+                        frozenset({"inspect"}),
+                        {"sensor": "A"},
+                        DOMAIN,
+                        ("e1",),
+                    )
+                },
+            ),
+            activate=True,
+        )
+        controller = MetamorpherController(
+            simple_graph("inspect"), version_space=manager, default_domain=DOMAIN
+        )
+        decision = controller.next()
+        original_digest = decision.version_space_digest
+        manager.active.hypotheses["h"] = Hypothesis(
+            "h",
+            frozenset({"inspect"}),
+            {"sensor": "B"},
+            DOMAIN,
+            ("e2",),
+        )
+        with self.assertRaisesRegex(StaleDecisionError, "version-space digest"):
+            controller.commit(decision)
+        self.assertNotEqual(original_digest, manager.digest(DOMAIN))
+
     def test_independent_audit_invalidates_pending_decision(self) -> None:
         controller = MetamorpherController(simple_graph("inspect"), default_domain=DOMAIN)
         decision = controller.next()

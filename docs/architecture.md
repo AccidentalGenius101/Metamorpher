@@ -123,6 +123,12 @@ to exactly one cell/domain learner, and `VersionSpaceManager` tracks activation
 per domain so the most recently updated regime cannot replace another regime's
 runtime uncertainty state.
 
+Issued decisions bind a canonical digest of the complete active version-space
+state: cell identity and status, parent relation, current and represented-parent
+hypotheses, predictions, safe actions, domains, provenance, and observations.
+Commit recomputes this digest, so replacing a hypothesis while preserving its ID
+and permission mask still invalidates the certificate.
+
 ### 7. Memory and audits
 
 Reusable claims are stored with domain tags and evidence provenance. They are

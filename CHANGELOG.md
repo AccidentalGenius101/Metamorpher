@@ -11,6 +11,9 @@
 - Added an append-only observation-batch journal so checkpoint rollback
   deterministically rebuilds adaptive learners and narrowed version spaces from
   retained evidence.
+- Bound decision tokens and commit freshness to a canonical digest of the full
+  active version-space state, preventing hypothesis or provenance substitution
+  behind an unchanged permission mask.
 - Connected accumulated failure evidence to automatic, evidence-supported
   equivalence-class carving and version-space materialization.
 - Recompute narrowed version spaces from their represented parent when novel

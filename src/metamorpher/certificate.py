@@ -2,8 +2,8 @@
 
 The controller is deliberately the authority that remembers which decision was
 issued.  A token is therefore an identifier, not a bearer credential.  The
-deterministic digest keeps traces reproducible while the epoch and evidence
-revision make stale decisions explicit.
+deterministic digest keeps traces reproducible while the graph epoch, evidence
+revision, and complete active version-space digest make stale decisions explicit.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from .evidence import EvidenceLedger
 from .graph import TypedActionGraph
 from .model import Decision, DomainTag, StaleDecisionError
+from .version_space import VersionSpaceManager
 
 
 def decision_token(
@@ -26,6 +27,7 @@ def decision_token(
     action_id: str | None,
     probe_id: str | None,
     frontier: Iterable[str],
+    version_space_digest: str = "",
 ) -> str:
     """Return a stable opaque identifier for one exact decision snapshot."""
 
@@ -38,6 +40,7 @@ def decision_token(
         action_id or "",
         probe_id or "",
         *sorted(frontier),
+        version_space_digest,
     )
     return hashlib.sha256("\x1f".join(fields).encode("utf-8")).hexdigest()
 
@@ -46,6 +49,7 @@ def assert_fresh(
     decision: Decision,
     graph: TypedActionGraph,
     evidence: EvidenceLedger,
+    version_space: VersionSpaceManager | None = None,
 ) -> None:
     """Reject a decision made against a different structural/evidence state."""
 
@@ -59,6 +63,10 @@ def assert_fresh(
             "decision evidence revision is stale: "
             f"issued={decision.evidence_revision}, current={evidence.revision}"
         )
+    if version_space is not None:
+        current_digest = version_space.digest(decision.domain)
+        if decision.version_space_digest != current_digest:
+            raise StaleDecisionError("decision version-space digest is stale")
 
 
 def supporting_evidence_ids(
