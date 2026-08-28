@@ -537,6 +537,64 @@ class OracleFirewallTests(unittest.TestCase):
 
 
 class ControllerRollbackTests(unittest.TestCase):
+    def test_rollback_replays_retained_evidence_through_adaptive_learning(self) -> None:
+        learning = AdaptiveLearningLoop(
+            AdaptiveFailureCarver("regime", min_branch_support=2),
+            outcome_key="result",
+            feature_keys=("sensor",),
+            safe_actions_by_outcome={"left": {"left"}, "right": {"right"}},
+            domain=DOMAIN,
+        )
+        controller = MetamorpherController(
+            simple_graph("left", "right"),
+            adaptive_learning=learning,
+            default_domain=DOMAIN,
+        )
+        checkpoint = controller.checkpoint("before-cases")
+        for index, (outcome, sensor) in enumerate(
+            (("left", "A"), ("right", "B"), ("left", "A"), ("right", "B"))
+        ):
+            controller.observe_many(
+                (
+                    Observation(f"result-{index}", "result", outcome, independent_audit=True, domain=DOMAIN),
+                    Observation(f"sensor-{index}", "sensor", sensor, independent_audit=True, domain=DOMAIN),
+                )
+            )
+        before_records = dict(controller.adaptive_learning.learner.carver.records)
+        before_revision = controller.evidence.revision
+
+        controller.rollback(checkpoint)
+
+        self.assertEqual(controller.evidence.revision, before_revision)
+        self.assertEqual(
+            controller.adaptive_learning.learner.carver.records,
+            before_records,
+        )
+        self.assertEqual(controller.version_space.active.status, ClassStatus.CARVED)
+        self.assertEqual(controller.next().status, DecisionStatus.ABSTAIN)
+
+    def test_rollback_replays_nonlearning_observations_into_version_space(self) -> None:
+        manager = VersionSpaceManager()
+        manager.add(
+            UnresolvedCell(
+                "cell",
+                {
+                    "left": Hypothesis("left", frozenset({"left"}), {"sensor": "A"}),
+                    "right": Hypothesis("right", frozenset({"right"}), {"sensor": "B"}),
+                },
+            ),
+            activate=True,
+        )
+        controller = MetamorpherController(
+            simple_graph("left", "right"), version_space=manager
+        )
+        checkpoint = controller.checkpoint("before-narrowing")
+        controller.observe(
+            Observation("sensor-a", "sensor", "A", independent_audit=True)
+        )
+        controller.rollback(checkpoint)
+        self.assertEqual(controller.version_space.active.surviving_ids, ("left",))
+
     def test_rollback_restores_derived_state_but_retains_evidence(self) -> None:
         graph = simple_graph("inspect", "repair")
         controller = MetamorpherController(graph, default_domain=DOMAIN)

@@ -86,6 +86,13 @@ Conflicting observations resolve to uncertainty when their weighted support is
 too close. The raw events remain available for audit even when a current fact is
 summarized.
 
+Controller-accepted observation batches are also retained in an internal replay
+journal. After restoring a checkpoint, batches newer than that checkpoint are
+deterministically replayed through version-space narrowing and adaptive
+learning. Evidence therefore cannot survive rollback while the learner silently
+forgets the state derived from it. Candidate graph revisions are not replayed,
+because graph structure is the explicit rollback target.
+
 ### 6. Version spaces and unresolved cells
 
 An `UnresolvedCell` represents cases that current observations cannot separate.

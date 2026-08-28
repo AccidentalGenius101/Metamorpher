@@ -136,6 +136,7 @@ class MetamorpherController:
         self._sequence = 0
         self._checkpoint_sequence = 0
         self._checkpoints: dict[str, _CheckpointState] = {}
+        self._observation_journal: list[tuple[int, tuple[Observation, ...]]] = []
         self._issued: Decision | None = None
         self._committed: _CommittedDirective | None = None
         self._lock = RLock()
@@ -268,6 +269,32 @@ class MetamorpherController:
             self.version_space = copy.deepcopy(saved.version_space)
             self.memory = copy.deepcopy(saved.memory)
             self.adaptive_learning = copy.deepcopy(saved.adaptive_learning)
+            replayed_batches = 0
+            for revision, observation_batch in self._observation_journal:
+                if revision <= saved.public.evidence_revision:
+                    continue
+                staged_learning = copy.deepcopy(self.adaptive_learning)
+                learned = (
+                    staged_learning.ingest(observation_batch)
+                    if staged_learning is not None
+                    else None
+                )
+                for observation in observation_batch:
+                    if observation.status in {
+                        ObservationStatus.OBSERVED,
+                        ObservationStatus.INFERRED,
+                    }:
+                        self.version_space.observe(
+                            observation.key,
+                            observation.value,
+                            observation.id,
+                            observation.domain,
+                        )
+                if learned is not None:
+                    _, learned_cell = learned
+                    self.adaptive_learning = staged_learning
+                    self.version_space.upsert(learned_cell, activate=True)
+                replayed_batches += 1
             self._issued = None
             self._committed = None
             self.trace.append(
@@ -277,6 +304,7 @@ class MetamorpherController:
                 graph_epoch=self.graph.epoch,
                 checkpoint_evidence_revision=saved.public.evidence_revision,
                 retained_evidence_revision=self.evidence.revision,
+                replayed_observation_batches=replayed_batches,
             )
             return saved.public
 
@@ -784,6 +812,10 @@ class MetamorpherController:
                     common_safe_actions=tuple(sorted(active.common_safe_actions())),
                     evidence_ids=tuple(item.id for item in observation_batch),
                 )
+
+            self._observation_journal.append(
+                (self.evidence.revision, observation_batch)
+            )
 
             if action_id is not None:
                 self._committed = None
