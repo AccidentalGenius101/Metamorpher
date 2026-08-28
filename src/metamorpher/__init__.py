@@ -77,6 +77,10 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "RefinementProposal": (".cognition", "RefinementProposal"),
     "StructuralCapsule": (".cognition", "StructuralCapsule"),
     "StructureLearner": (".cognition", "StructureLearner"),
+    "GroundedTextRenderer": (".text", "GroundedTextRenderer"),
+    "InterpreterPerceiver": (".text", "InterpreterPerceiver"),
+    "TextEvidence": (".text", "TextEvidence"),
+    "TextInterpreter": (".text", "TextInterpreter"),
 }
 
 
@@ -137,9 +141,11 @@ __all__ = [
     "FailureCarver",
     "FrontierResult",
     "GraphBatchCompiler",
+    "GroundedTextRenderer",
     "HeuristicLookaheadPolicy",
     "Hypothesis",
     "InMemoryCapsuleStore",
+    "InterpreterPerceiver",
     "MemoryRecord",
     "MetamorpherController",
     "Observation",
@@ -156,6 +162,8 @@ __all__ = [
     "RevisionResult",
     "StructuralCapsule",
     "StructureLearner",
+    "TextEvidence",
+    "TextInterpreter",
     "TruthValue",
     "TypedActionGraph",
     "UnresolvedCell",

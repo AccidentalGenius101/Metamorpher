@@ -226,6 +226,20 @@ copied only when a batch contains a configured learning outcome. These changes
 preserve symbolic semantics while avoiding quadratic target scans and unrelated
 history copies.
 
+## Language boundary
+
+`InterpreterPerceiver` connects text to the developmental loop without treating
+language-model output as truth. A `TextInterpreter` emits typed claims anchored
+to exact source spans; the adapter validates those spans and produces
+domain-attributed observations with deterministic IDs. The interpreter still
+has no authority to activate hypotheses or execute actions.
+
+`GroundedTextRenderer` performs the reverse boundary. It renders decisions as
+model-relative explanations and names abstention or refinement explicitly. It
+does not convert `supported_under_model` into a claim of truth or physical
+safety. Provider-specific language models can implement `TextInterpreter`
+without becoming dependencies of the control kernel.
+
 This outer loop is an integration contract, not a claim that the reference
 package already solves perception, ontology induction, causal discovery, or
 calibrated structural learning. Implementations remain independently testable

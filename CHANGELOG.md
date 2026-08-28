@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added an attributable text-interpreter adapter with exact source spans and a
+  deterministic, model-relative decision renderer.
 - Connected raw perception, domain evidence ingestion, capsule retrieval, and
   quarantined proposal installation through the cognitive outer loop.
 - Added fail-closed settlement for external execution/learning failures,

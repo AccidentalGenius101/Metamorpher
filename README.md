@@ -282,6 +282,11 @@ structure learning, external execution, and domain-bounded structural capsules.
 constraints quarantined and the controller's commit boundary intact. See the
 "Developmental outer loop" section of [`docs/architecture.md`](docs/architecture.md).
 
+Text providers can implement `TextInterpreter` and use `InterpreterPerceiver`
+to turn source-span-anchored claims into ordinary cognitive-loop observations.
+`GroundedTextRenderer` converts decisions back into deliberately model-relative
+language without claiming truth or external safety.
+
 ## Develop
 
 The complete behavioral suite runs with the standard library:
