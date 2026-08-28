@@ -43,3 +43,12 @@ class DomainMemory:
 
     def candidates(self, claim: str) -> tuple[MemoryRecord, ...]:
         return tuple(v for (c, _), v in self._records.items() if c == claim)
+
+    def for_domain(self, domain: DomainTag) -> tuple[MemoryRecord, ...]:
+        return tuple(
+            record
+            for (_, record_domain), record in sorted(
+                self._records.items(), key=lambda item: item[0][0]
+            )
+            if record_domain == domain
+        )

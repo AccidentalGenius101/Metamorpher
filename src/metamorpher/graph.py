@@ -107,10 +107,13 @@ class TypedActionGraph:
         blocked: list[str] = []
         unknown: dict[str, tuple[str, ...]] = {}
         violated: dict[str, tuple[str, ...]] = {}
+        by_target: dict[str, list[Constraint]] = {node_id: [] for node_id in self.nodes}
+        for constraint in self.constraints.values():
+            by_target[constraint.target].append(constraint)
         for node_id in sorted(self.nodes):
             if state.status_of(node_id) != ActionStatus.PENDING:
                 continue
-            cs = self.constraints_for(node_id)
+            cs = by_target[node_id]
             unknown_ids: list[str] = []
             violated_ids: list[str] = []
             for c in cs:

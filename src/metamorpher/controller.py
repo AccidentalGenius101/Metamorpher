@@ -273,7 +273,12 @@ class MetamorpherController:
             for revision, observation_batch in self._observation_journal:
                 if revision <= saved.public.evidence_revision:
                     continue
-                staged_learning = copy.deepcopy(self.adaptive_learning)
+                staged_learning = (
+                    copy.deepcopy(self.adaptive_learning)
+                    if self.adaptive_learning is not None
+                    and self.adaptive_learning.accepts(observation_batch)
+                    else self.adaptive_learning
+                )
                 learned = (
                     staged_learning.ingest(observation_batch)
                     if staged_learning is not None
@@ -613,6 +618,38 @@ class MetamorpherController:
             )
             return self.graph.nodes[selected]
 
+    def fail_committed(
+        self,
+        reason: str,
+        *,
+        source: str = "cognitive_loop",
+    ) -> ObservationReceipt:
+        """Fail closed after an external execution boundary raises.
+
+        The censored observation records that an outcome could not be recovered;
+        it does not claim that the action had no external effect.
+        """
+
+        with self._lock:
+            if self._committed is None:
+                raise StaleDecisionError("no committed action to fail")
+            decision = self._committed.decision
+            return self.observe(
+                Observation(
+                    id=f"execution-failure-{decision.token}",
+                    key="execution_outcome",
+                    value=None,
+                    status=ObservationStatus.CENSORED,
+                    source=source,
+                    reliability=0.0,
+                    domain=decision.domain,
+                    action_token=decision.token,
+                    censoring_reason=reason,
+                ),
+                token=decision.token,
+                action_status=ActionStatus.FAILED,
+            )
+
     def _check_observation_batch(
         self,
         observations: tuple[Observation, ...],
@@ -745,7 +782,12 @@ class MetamorpherController:
                 revision_batch,
                 prospective_observations,
             )
-            staged_learning = copy.deepcopy(self.adaptive_learning)
+            staged_learning = (
+                copy.deepcopy(self.adaptive_learning)
+                if self.adaptive_learning is not None
+                and self.adaptive_learning.accepts(observation_batch)
+                else self.adaptive_learning
+            )
             learned = (
                 staged_learning.ingest(observation_batch)
                 if staged_learning is not None
@@ -758,6 +800,17 @@ class MetamorpherController:
                     # the ledger was mutated outside the controller.
                     raise StaleDecisionError(
                         f"evidence ledger changed during append: {observation.id}"
+                    )
+                if observation.domain is not None and (
+                    isinstance(observation.value, bool)
+                    or observation.status == ObservationStatus.CENSORED
+                ):
+                    self.memory.record(
+                        observation.key,
+                        observation.domain,
+                        observation.value if isinstance(observation.value, bool) else None,
+                        observation.id,
+                        censored=observation.status == ObservationStatus.CENSORED,
                     )
             revision_result = apply_prepared_revisions(self.graph, prepared)
 
@@ -810,16 +863,25 @@ class MetamorpherController:
                     evidence_ids=revision_result.evidence_ids,
                     reasons=revision_result.reasons,
                 )
-            active = self.version_space.active
-            if active is not None:
-                self.trace.append(
-                    "version_space_updated",
-                    cell_id=active.id,
-                    status=active.status,
-                    surviving_hypotheses=active.surviving_ids,
-                    common_safe_actions=tuple(sorted(active.common_safe_actions())),
-                    evidence_ids=tuple(item.id for item in observation_batch),
-                )
+            affected_domains = {item.domain for item in observation_batch}
+            for affected_domain in sorted(affected_domains, key=repr):
+                active = self.version_space.active_for(affected_domain)
+                if active is not None:
+                    self.trace.append(
+                        "version_space_updated",
+                        cell_id=active.id,
+                        domain=affected_domain,
+                        status=active.status,
+                        surviving_hypotheses=active.surviving_ids,
+                        common_safe_actions=tuple(
+                            sorted(active.common_safe_actions(affected_domain))
+                        ),
+                        evidence_ids=tuple(
+                            item.id
+                            for item in observation_batch
+                            if item.domain == affected_domain
+                        ),
+                    )
 
             self._observation_journal.append(
                 (self.evidence.revision, observation_batch)

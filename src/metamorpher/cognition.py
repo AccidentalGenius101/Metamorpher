@@ -14,21 +14,47 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from .adapters import ActionExecutor, ExecutionResult
+from .adapters import ActionExecutor, ExecutionResult, ObservationSource
+from .audit import AuditPolicy
 from .carving import ConstraintRevision
 from .controller import MetamorpherController, ObservationReceipt
 from .model import (
     ActionNode,
     ActionStatus,
     ClaimTier,
+    ClassStatus,
     Constraint,
     Decision,
     DecisionStatus,
     DomainTag,
     InvalidGraphError,
     Observation,
+    ObservationStatus,
 )
 from .version_space import Hypothesis, UnresolvedCell
+
+
+def _bind_observation(
+    item: Observation,
+    domain: DomainTag,
+    *,
+    token: str | None = None,
+    independent_audit: bool = False,
+    source: str | None = None,
+) -> Observation:
+    return Observation(
+        item.id,
+        item.key,
+        item.value,
+        item.status,
+        item.source or source or "unknown",
+        item.reliability,
+        item.domain or domain,
+        item.action_token or token,
+        item.timestamp,
+        item.censoring_reason,
+        independent_audit,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +179,14 @@ class CognitiveStep:
     decision: Decision
     result: ExecutionResult | None
     receipt: ObservationReceipt | None
+    audit_receipt: ObservationReceipt | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CognitiveIngestion:
+    perception: Perception
+    proposal: CandidateStructure | None
+    graph_epoch: int
 
 
 class CognitiveLoop:
@@ -165,11 +199,128 @@ class CognitiveLoop:
         executor: ActionExecutor,
         learner: StructureLearner | None = None,
         capsules: CapsuleStore | None = None,
+        perceiver: Perceiver | None = None,
+        proposer: Proposer | None = None,
+        discriminator: Discriminator | None = None,
+        audit_policy: AuditPolicy | None = None,
+        auditor: ObservationSource | None = None,
     ) -> None:
         self.controller = controller
         self.executor = executor
         self.learner = learner
         self.capsules = capsules or InMemoryCapsuleStore()
+        self.perceiver = perceiver
+        self.proposer = proposer
+        self.discriminator = discriminator
+        self.audit_policy = audit_policy
+        self.auditor = auditor
+        self._case_index = 0
+
+    def ingest(
+        self,
+        raw_input: Any,
+        domain: DomainTag,
+        context: Mapping[str, Any] | None = None,
+    ) -> CognitiveIngestion:
+        """Perceive raw input, record evidence, and quarantine proposed structure."""
+
+        if self.perceiver is None:
+            raise RuntimeError("cognitive ingestion requires a perceiver")
+        perception = self.perceiver.perceive(raw_input, domain)
+        observations = tuple(
+            _bind_observation(
+                item, domain, independent_audit=True, source=perception.source
+            )
+            for item in perception.observations
+        )
+        self.controller.observe_many(observations)
+        proposal = None
+        if self.proposer is not None:
+            proposal_context = {
+                **dict(context or {}),
+                "representation": dict(perception.representation),
+                "capsules": self.capsules.candidates(domain),
+                "memory": self.controller.memory.for_domain(domain),
+            }
+            proposal = self.proposer.propose(proposal_context, observations, domain)
+            self.install_candidates(proposal)
+        return CognitiveIngestion(perception, proposal, self.controller.graph.epoch)
+
+    def capture_capsule(
+        self,
+        capsule_id: str,
+        domain: DomainTag,
+        *,
+        constraint_ids: Sequence[str] = (),
+        evidence_ids: Sequence[str] = (),
+        parent_ids: Sequence[str] = (),
+    ) -> StructuralCapsule:
+        """Persist only active, non-candidate, evidence-backed structure."""
+
+        cell = self.controller.version_space.active_for(domain)
+        constraints = tuple(
+            self.controller.graph.constraints[item] for item in constraint_ids
+        )
+        if any(item.tier == ClaimTier.CANDIDATE for item in constraints):
+            raise ValueError("candidate constraints cannot enter a capsule")
+        evidence = {item.id: item for item in self.controller.evidence.events}
+        if set(evidence_ids) - evidence.keys():
+            raise ValueError("capsule references unknown evidence")
+        if any(evidence[item].domain != domain for item in evidence_ids):
+            raise ValueError("capsule evidence does not match its domain")
+        if cell is None or not evidence_ids:
+            raise ValueError("capsule requires active hypotheses and evidence")
+        capsule = StructuralCapsule(
+            capsule_id,
+            domain,
+            constraints,
+            tuple(cell.hypotheses.values()),
+            tuple(sorted(set(evidence_ids))),
+            tuple(parent_ids),
+        )
+        self.capsules.put(capsule)
+        self.controller.trace.append("capsule_captured", capsule_id=capsule_id)
+        return capsule
+
+    def request_refinement(
+        self,
+        domain: DomainTag,
+        context: Mapping[str, Any] | None = None,
+    ) -> RefinementProposal | None:
+        """Quarantine a discriminator's probe and corresponding safe hypotheses."""
+
+        if self.discriminator is None:
+            raise RuntimeError("refinement requires a discriminator")
+        cell = self.controller.version_space.active_for(domain)
+        if cell is None:
+            return None
+        refinement = self.discriminator.discriminate(cell, context or {}, domain)
+        if refinement is None:
+            return None
+        unknown_targets = sorted(set(refinement.targets) - cell.hypotheses.keys())
+        if unknown_targets:
+            raise InvalidGraphError(
+                f"refinement names unknown hypotheses: {unknown_targets}"
+            )
+        hypotheses = tuple(
+            Hypothesis(
+                item.id,
+                item.safe_actions.union({refinement.probe.id}),
+                item.predictions,
+                item.domain,
+                item.provenance,
+            )
+            for item in cell.hypotheses.values()
+        )
+        self.install_candidates(
+            CandidateStructure(
+                nodes=(refinement.probe,),
+                constraints=refinement.constraints,
+                hypotheses=hypotheses,
+                rationale=refinement.rationale,
+            )
+        )
+        return refinement
 
     def install_candidates(self, proposal: CandidateStructure) -> int:
         """Atomically install novel nodes and quarantined candidate constraints."""
@@ -194,6 +345,22 @@ class CognitiveLoop:
                     f"candidate constraint already exists: {constraint.id}"
                 )
 
+        hypothesis_ids = [item.id for item in proposal.hypotheses]
+        if len(hypothesis_ids) != len(set(hypothesis_ids)):
+            raise InvalidGraphError("candidate proposal contains duplicate hypotheses")
+        available_actions = existing_nodes.union(proposed_node_ids)
+        for hypothesis in proposal.hypotheses:
+            unknown_actions = sorted(hypothesis.safe_actions - available_actions)
+            if unknown_actions:
+                raise InvalidGraphError(
+                    f"candidate hypothesis {hypothesis.id!r} names unknown actions: "
+                    f"{unknown_actions}"
+                )
+            if hypothesis.domain is None:
+                raise InvalidGraphError(
+                    f"candidate hypothesis {hypothesis.id!r} requires a domain"
+                )
+
         tx = self.controller.graph.transaction()
         with tx as staged:
             for node in proposal.nodes:
@@ -212,6 +379,44 @@ class CognitiveLoop:
             )
         return self.controller.graph.epoch
 
+    def promote_candidate_cell(
+        self,
+        cell_id: str,
+        evidence_ids: Sequence[str],
+        reason: str,
+    ) -> UnresolvedCell:
+        """Activate quarantined hypotheses only with observed domain evidence."""
+
+        if not reason.strip():
+            raise ValueError("candidate promotion requires a reason")
+        cell = self.controller.version_space.cells.get(cell_id)
+        if cell is None or not cell_id.startswith("candidate-cell-"):
+            raise KeyError(f"unknown candidate cell: {cell_id}")
+        if not evidence_ids:
+            raise ValueError("candidate promotion requires evidence")
+        records = {
+            item.id: item
+            for item in self.controller.evidence.events
+            if item.status in {ObservationStatus.OBSERVED, ObservationStatus.INFERRED}
+        }
+        missing = tuple(sorted(set(evidence_ids) - records.keys()))
+        if missing:
+            raise ValueError(f"unknown or unusable promotion evidence: {missing}")
+        domains = {hypothesis.domain for hypothesis in cell.hypotheses.values()}
+        evidence_domains = {records[item].domain for item in evidence_ids}
+        if len(domains) != 1 or evidence_domains != domains:
+            raise ValueError("promotion evidence does not match candidate cell domain")
+        cell.status = ClassStatus.SUPPORTED
+        cell.evidence_ids.update(evidence_ids)
+        self.controller.version_space.activate(cell_id)
+        self.controller.trace.append(
+            "candidate_cell_promoted",
+            cell_id=cell_id,
+            evidence_ids=tuple(sorted(set(evidence_ids))),
+            reason=reason,
+        )
+        return cell
+
     def step(self, domain: DomainTag | None = None) -> CognitiveStep:
         """Decide, commit, execute externally, then atomically learn/observe."""
 
@@ -220,28 +425,29 @@ class CognitiveLoop:
             return CognitiveStep(decision, None, None)
 
         node = self.controller.commit(decision)
-        result = self.executor.execute(decision)
+        try:
+            result = self.executor.execute(decision)
+        except Exception as exc:
+            self.controller.fail_committed(
+                f"executor raised {type(exc).__name__}: {exc}"
+            )
+            raise
         if result.action_id != node.id:
+            self.controller.fail_committed(
+                f"executor attributed result to {result.action_id!r}, expected {node.id!r}"
+            )
             raise ValueError(
                 f"executor returned {result.action_id!r} for committed action {node.id!r}"
             )
         observations = tuple(result.observations)
         if not observations:
+            self.controller.fail_committed("executor returned no observations")
             raise ValueError("executor must return at least one observation")
         normalized = tuple(
-            observation
-            if observation.action_token is not None
-            else Observation(
-                id=observation.id,
-                key=observation.key,
-                value=observation.value,
-                status=observation.status,
-                source=observation.source,
-                reliability=observation.reliability,
-                domain=observation.domain,
-                action_token=decision.token,
-                timestamp=observation.timestamp,
-                censoring_reason=observation.censoring_reason,
+            _bind_observation(
+                observation,
+                decision.domain,
+                token=decision.token,
                 independent_audit=observation.independent_audit,
             )
             for observation in observations
@@ -253,17 +459,60 @@ class CognitiveLoop:
             message=result.message,
             external_reference=result.external_reference,
         )
-        revisions = (
-            tuple(self.learner.revise(self.controller, decision, normalized_result))
-            if self.learner is not None
-            else ()
+        resulting_status = (
+            ActionStatus.COMPLETED if result.succeeded else ActionStatus.FAILED
         )
-        receipt = self.controller.observe_many(
-            normalized,
-            token=decision.token,
-            action_status=(
-                ActionStatus.COMPLETED if result.succeeded else ActionStatus.FAILED
-            ),
-            revisions=revisions,
-        )
-        return CognitiveStep(decision, normalized_result, receipt)
+        try:
+            revisions = (
+                tuple(self.learner.revise(self.controller, decision, normalized_result))
+                if self.learner is not None
+                else ()
+            )
+        except Exception:
+            self.controller.observe_many(
+                normalized,
+                token=decision.token,
+                action_status=resulting_status,
+            )
+            raise
+        try:
+            receipt = self.controller.observe_many(
+                normalized,
+                token=decision.token,
+                action_status=resulting_status,
+                revisions=revisions,
+            )
+        except Exception as primary:
+            # Invalid proposed revisions must not strand a real external
+            # outcome. Retry the observation without structural authority.
+            if revisions:
+                try:
+                    receipt = self.controller.observe_many(
+                        normalized,
+                        token=decision.token,
+                        action_status=resulting_status,
+                    )
+                except Exception:
+                    self.controller.fail_committed(
+                        f"observation ingestion raised {type(primary).__name__}: {primary}"
+                    )
+                    raise primary
+            else:
+                self.controller.fail_committed(
+                    f"observation ingestion raised {type(primary).__name__}: {primary}"
+                )
+                raise
+        self._case_index += 1
+        audit_receipt = None
+        if (
+            self.audit_policy is not None
+            and self.auditor is not None
+            and self.audit_policy.consume(self._case_index)
+        ):
+            audits = tuple(
+                _bind_observation(item, decision.domain, independent_audit=True)
+                for item in self.auditor.collect(node, decision.domain)
+            )
+            if audits:
+                audit_receipt = self.controller.observe_many(audits)
+        return CognitiveStep(decision, normalized_result, receipt, audit_receipt)

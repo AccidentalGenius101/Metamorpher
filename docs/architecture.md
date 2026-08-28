@@ -205,6 +205,27 @@ their supporting observations. `install_candidates` accepts only constraints
 tagged `candidate`; a proposer cannot promote its own output to supported or
 external-policy structure.
 
+Raw ingestion follows that low-authority path directly: `Perceiver` emits
+domain-attributed evidence, matching capsules enter proposal context, and
+`Proposer` output is installed only in quarantine. Candidate hypotheses remain
+inactive until observed or inferred evidence from their domain supports an
+explicit promotion. Exceptions beyond a committed external boundary produce a
+censored failure receipt, preventing a stranded controller without claiming
+that an unknown physical effect did not occur.
+
+Discriminator probes follow the same authority boundary: the probe and a copy
+of the surviving hypotheses that considers it safe enter a quarantined cell,
+then require domain-matching evidence before activation. Accepted Boolean and
+censored observations update scoped memory, supported active structure can be
+captured as an evidence-backed capsule, and precommitted `AuditPolicy` schedules
+independent observations outside value ranking.
+
+The reference path indexes constraints by target once per frontier and caches
+resolved evidence facts until their key changes. Adaptive state is transactionally
+copied only when a batch contains a configured learning outcome. These changes
+preserve symbolic semantics while avoiding quadratic target scans and unrelated
+history copies.
+
 This outer loop is an integration contract, not a claim that the reference
 package already solves perception, ontology induction, causal discovery, or
 calibrated structural learning. Implementations remain independently testable

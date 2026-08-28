@@ -26,6 +26,7 @@ class EvidenceLedger:
         self._by_key: dict[str, list[Observation]] = defaultdict(list)
         self.revision = 0
         self.ambiguity_margin = ambiguity_margin
+        self._resolved_cache: dict[str, ResolvedFact] = {}
 
     @property
     def events(self) -> tuple[Observation, ...]:
@@ -40,6 +41,7 @@ class EvidenceLedger:
         self._events.append(observation)
         self._by_key[observation.key].append(observation)
         self.revision += 1
+        self._resolved_cache.pop(observation.key, None)
         return True
 
     def records(self, key: str, *, include_censored: bool = True) -> tuple[Observation, ...]:
@@ -49,9 +51,14 @@ class EvidenceLedger:
         return tuple(x for x in values if x.status != ObservationStatus.CENSORED)
 
     def resolve(self, key: str) -> ResolvedFact:
+        cached = self._resolved_cache.get(key)
+        if cached is not None:
+            return cached
         records = [x for x in self._by_key.get(key, ()) if x.status != ObservationStatus.CENSORED]
         if not records:
-            return ResolvedFact(key, TruthValue.UNKNOWN)
+            result = ResolvedFact(key, TruthValue.UNKNOWN)
+            self._resolved_cache[key] = result
+            return result
         weights: dict[str, float] = defaultdict(float)
         originals: dict[str, Any] = {}
         ids: dict[str, list[str]] = defaultdict(list)
@@ -67,8 +74,11 @@ class EvidenceLedger:
         second = ordered[1][1] if len(ordered) > 1 else 0.0
         confidence = top_weight / total if total else 0.0
         if len(ordered) > 1 and (top_weight - second) / max(total, 1e-12) < self.ambiguity_margin:
-            return ResolvedFact(key, TruthValue.UNKNOWN, evidence_ids=tuple(x.id for x in records), confidence=confidence)
-        return ResolvedFact(key, TruthValue.SATISFIED, originals[top_key], tuple(ids[top_key]), confidence)
+            result = ResolvedFact(key, TruthValue.UNKNOWN, evidence_ids=tuple(x.id for x in records), confidence=confidence)
+        else:
+            result = ResolvedFact(key, TruthValue.SATISFIED, originals[top_key], tuple(ids[top_key]), confidence)
+        self._resolved_cache[key] = result
+        return result
 
     def evaluate(self, key: str, expected: Any) -> ResolvedFact:
         fact = self.resolve(key)

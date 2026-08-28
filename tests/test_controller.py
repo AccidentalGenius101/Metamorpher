@@ -459,6 +459,47 @@ class ControllerFreshnessAndObservationTests(unittest.TestCase):
         )
         self.assertEqual(manager.active.surviving_ids, ("h1", "h2"))
 
+    def test_version_space_trace_names_the_domain_cell_actually_updated(self) -> None:
+        domain_b = DomainTag("B")
+        manager = VersionSpaceManager()
+        for cell_id, domain, sensor in (
+            ("cell-a", DOMAIN, "A"),
+            ("cell-b", domain_b, "B"),
+        ):
+            manager.add(
+                UnresolvedCell(
+                    cell_id,
+                    {
+                        cell_id: Hypothesis(
+                            cell_id,
+                            frozenset({"inspect"}),
+                            {"sensor": sensor},
+                            domain,
+                        )
+                    },
+                ),
+                activate=True,
+            )
+        controller = MetamorpherController(
+            simple_graph("inspect"), version_space=manager
+        )
+        controller.observe(
+            Observation(
+                "sensor-a",
+                "sensor",
+                "A",
+                domain=DOMAIN,
+                independent_audit=True,
+            )
+        )
+        event = tuple(
+            item
+            for item in controller.trace.events
+            if item.kind == "version_space_updated"
+        )[-1]
+        self.assertEqual(event.payload["cell_id"], "cell-a")
+        self.assertEqual(event.payload["domain"]["name"], DOMAIN.name)
+
     def test_completed_irreversible_action_is_recorded(self) -> None:
         graph = simple_graph("irreversible")
         graph.nodes["irreversible"].irreversible = True

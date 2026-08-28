@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Connected raw perception, domain evidence ingestion, capsule retrieval, and
+  quarantined proposal installation through the cognitive outer loop.
+- Added fail-closed settlement for external execution/learning failures,
+  domain normalization at the executor boundary, domain-honest version-space
+  traces, and evidence-gated candidate-hypothesis promotion.
+- Connected discriminator proposals through quarantined refinement cells,
+  automatic domain memory ingestion, evidence-backed capsule capture/retrieval,
+  and precommitted audit collection.
+- Reduced symbolic frontier construction from repeated target scans to one
+  indexed pass, cached evidence resolution by key, avoided adaptive-state copies
+  for unrelated batches, and centralized observation boundary normalization.
 - Closed the runtime learning loop: complete controller observation batches can
   now automatically carve and install revised version spaces through
   `AdaptiveLearningLoop`, with atomic validation and conservative unseen-outcome

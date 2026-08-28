@@ -522,6 +522,13 @@ class AdaptiveLearningLoop:
         )
         return result, cell
 
+    def accepts(self, observations: Iterable[Observation]) -> bool:
+        return any(
+            item.key == self.outcome_key
+            and item.status in {ObservationStatus.OBSERVED, ObservationStatus.INFERRED}
+            for item in observations
+        )
+
 
 @dataclass(slots=True)
 class AdaptiveLearningRouter:
@@ -563,6 +570,14 @@ class AdaptiveLearningRouter:
         if mismatched:
             raise ValueError("learning outcome has no matching domain/cell route")
         return None
+
+    def accepts(self, observations: Iterable[Observation]) -> bool:
+        keys = {loop.outcome_key for loop in self.loops.values()}
+        return any(
+            item.key in keys
+            and item.status in {ObservationStatus.OBSERVED, ObservationStatus.INFERRED}
+            for item in observations
+        )
 
 
 @dataclass(frozen=True, slots=True)
