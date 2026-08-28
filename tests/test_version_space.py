@@ -61,6 +61,32 @@ class VersionSpaceTests(unittest.TestCase):
             ClassStatus.SUPPORTED,
             "an observation outside every surviving hypothesis must reopen uncertainty",
         )
+        self.assertEqual(
+            cell.surviving_ids,
+            ("crack", "gasket"),
+            "novel evidence must reopen the represented parent class",
+        )
+
+    def test_unrepresented_observations_do_not_count_as_resolution_support(self) -> None:
+        cell = UnresolvedCell("leak", hypotheses(), min_resolution_support=2)
+        cell.observe("soot_pattern", "joint", "informative")
+        cell.observe("irrelevant_sensor", "anything", "uninformative")
+        self.assertNotEqual(cell.status, ClassStatus.SUPPORTED)
+
+    def test_domain_specific_hypotheses_do_not_leak_across_domains(self) -> None:
+        a = DomainTag("A")
+        b = DomainTag("B")
+        cell = UnresolvedCell(
+            "domain-cell",
+            {
+                "a": Hypothesis("a", frozenset({"left"}), domain=a),
+                "b": Hypothesis("b", frozenset({"right"}), domain=b),
+                "portable": Hypothesis("portable", frozenset({"inspect"})),
+            },
+        )
+        self.assertEqual(cell.common_safe_actions(a), frozenset())
+        self.assertEqual(set(cell.hypotheses_for(a)), {"a", "portable"})
+        self.assertEqual(set(cell.hypotheses_for(b)), {"b", "portable"})
 
     def test_manager_only_updates_active_cell(self) -> None:
         manager = VersionSpaceManager()

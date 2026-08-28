@@ -27,15 +27,42 @@ class UnresolvedCell:
     observations: list[tuple[str, Any, str]] = field(default_factory=list)
     evidence_ids: set[str] = field(default_factory=set)
     min_resolution_support: int = 1
+    _original_hypotheses: dict[str, Hypothesis] = field(
+        init=False, repr=False, default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        if self.min_resolution_support < 1:
+            raise ValueError("min_resolution_support must be positive")
+        if not self.hypotheses:
+            raise ValueError("an unresolved cell requires at least one hypothesis")
+        self._original_hypotheses = dict(self.hypotheses)
 
     @property
     def surviving_ids(self) -> tuple[str, ...]:
         return tuple(sorted(self.hypotheses))
 
-    def common_safe_actions(self) -> frozenset[str]:
-        if not self.hypotheses:
+    def hypotheses_for(self, domain: DomainTag | None = None) -> dict[str, Hypothesis]:
+        """Return hypotheses applicable to ``domain``.
+
+        An untagged hypothesis is portable. A tagged hypothesis applies only
+        to the exact domain it names; merely storing domain provenance without
+        enforcing it would let evidence from one regime constrain another.
+        """
+
+        if domain is None:
+            return dict(self.hypotheses)
+        return {
+            hypothesis_id: hypothesis
+            for hypothesis_id, hypothesis in self.hypotheses.items()
+            if hypothesis.domain is None or hypothesis.domain == domain
+        }
+
+    def common_safe_actions(self, domain: DomainTag | None = None) -> frozenset[str]:
+        applicable = self.hypotheses_for(domain)
+        if not applicable:
             return frozenset()
-        iterator = iter(self.hypotheses.values())
+        iterator = iter(applicable.values())
         common = set(next(iterator).safe_actions)
         for hypothesis in iterator:
             common.intersection_update(hypothesis.safe_actions)
@@ -46,20 +73,35 @@ class UnresolvedCell:
             return
         self.evidence_ids.add(evidence_id)
         self.observations.append((test_id, value, evidence_id))
+        informative = [
+            (observed_test, observed_value)
+            for observed_test, observed_value, _ in self.observations
+            if any(
+                observed_test in hypothesis.predictions
+                for hypothesis in self._original_hypotheses.values()
+            )
+        ]
         compatible = {
-            hid: h for hid, h in self.hypotheses.items()
-            if test_id not in h.predictions or h.predictions[test_id] == value
+            hypothesis_id: hypothesis
+            for hypothesis_id, hypothesis in self._original_hypotheses.items()
+            if all(
+                test not in hypothesis.predictions
+                or hypothesis.predictions[test] == observed_value
+                for test, observed_value in informative
+            )
         }
-        # Empty compatibility widens uncertainty; it never invents a winner.
-        if compatible:
-            self.hypotheses = compatible
-        else:
-            # The represented space failed to explain the observation.  Keep
-            # every surviving possibility and widen the epistemic status; an
-            # empty match is not permission to choose a winner.
+        # Recompute from the original represented class on every observation.
+        # Otherwise an early narrowing permanently deletes alternatives and a
+        # later contradiction cannot truthfully reopen the equivalence class.
+        if not compatible:
+            self.hypotheses = dict(self._original_hypotheses)
             self.status = ClassStatus.UNRESOLVED
             return
-        if len(self.hypotheses) == 1 and len(self.observations) >= self.min_resolution_support:
+        self.hypotheses = compatible
+        if (
+            len(self.hypotheses) == 1
+            and len(informative) >= self.min_resolution_support
+        ):
             self.status = ClassStatus.SUPPORTED
         elif len(self.hypotheses) > 1:
             self.status = ClassStatus.UNRESOLVED
@@ -77,6 +119,13 @@ class VersionSpaceManager:
     def add(self, cell: UnresolvedCell, *, activate: bool = False) -> None:
         if cell.id in self.cells:
             raise ValueError(f"duplicate unresolved cell: {cell.id}")
+        self.cells[cell.id] = cell
+        if activate:
+            self.active_cell_id = cell.id
+
+    def upsert(self, cell: UnresolvedCell, *, activate: bool = False) -> None:
+        """Install a newly learned revision of an observational cell."""
+
         self.cells[cell.id] = cell
         if activate:
             self.active_cell_id = cell.id

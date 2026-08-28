@@ -22,9 +22,11 @@ from .model import (
     ClaimTier,
     ConstraintKind,
     ControllerState,
+    DomainTag,
     TruthValue,
 )
 from .policy import HeuristicLookaheadPolicy
+from .version_space import VersionSpaceManager
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +38,7 @@ class CompiledBatch:
     features: list[list[list[float]]]
     weights: tuple[float, ...]
     refinement: tuple[tuple[str, ...], ...]
+    represented_hypotheses: tuple[tuple[str, ...], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,12 +64,20 @@ class GraphBatchCompiler:
         self,
         states: Sequence[ControllerState],
         ledgers: Sequence[EvidenceLedger] | None = None,
+        version_spaces: Sequence[VersionSpaceManager | None] | None = None,
+        domains: Sequence[DomainTag | None] | None = None,
     ) -> CompiledBatch:
         if not states:
             raise ValueError("states must contain at least one controller state")
         evidence = list(ledgers or (EvidenceLedger() for _ in states))
         if len(evidence) != len(states):
             raise ValueError("states and ledgers must have the same length")
+        spaces = list(version_spaces or (None for _ in states))
+        if len(spaces) != len(states):
+            raise ValueError("states and version_spaces must have the same length")
+        selected_domains = list(domains or (None for _ in states))
+        if len(selected_domains) != len(states):
+            raise ValueError("states and domains must have the same length")
 
         action_ids = tuple(sorted(self.graph.nodes))
         index = {action_id: i for i, action_id in enumerate(action_ids)}
@@ -79,12 +90,27 @@ class GraphBatchCompiler:
         prerequisites_batch: list[list[list[bool]]] = []
         features_batch: list[list[list[float]]] = []
         refinement_batch: list[tuple[str, ...]] = []
+        hypotheses_batch: list[tuple[str, ...]] = []
 
-        for state, ledger in zip(states, evidence):
+        for state, ledger, version_space, domain in zip(
+            states, evidence, spaces, selected_domains
+        ):
             pending = [state.status_of(x) == ActionStatus.PENDING for x in action_ids]
             completed = [state.completed(x) for x in action_ids]
             prerequisites = [[False] * n for _ in range(n)]
             refinement: set[str] = set()
+            active_cell = version_space.active if version_space is not None else None
+            if active_cell is None:
+                common_safe = set(action_ids)
+                represented_hypotheses: tuple[str, ...] = ()
+            else:
+                common_safe = set(active_cell.common_safe_actions(domain))
+                represented_hypotheses = tuple(
+                    sorted(active_cell.hypotheses_for(domain))
+                )
+                for action_id, action_index in index.items():
+                    if action_id not in common_safe:
+                        pending[action_index] = False
 
             for constraint in self.graph.constraints.values():
                 target = index[constraint.target]
@@ -132,6 +158,7 @@ class GraphBatchCompiler:
             prerequisites_batch.append(prerequisites)
             features_batch.append(feature_rows)
             refinement_batch.append(tuple(sorted(refinement)))
+            hypotheses_batch.append(represented_hypotheses)
 
         p = self.policy
         weights = (
@@ -151,6 +178,7 @@ class GraphBatchCompiler:
             features_batch,
             weights,
             tuple(refinement_batch),
+            tuple(hypotheses_batch),
         )
 
     def run(
@@ -158,8 +186,10 @@ class GraphBatchCompiler:
         states: Sequence[ControllerState],
         ledgers: Sequence[EvidenceLedger] | None = None,
         backend: AccelerationBackend | None = None,
+        version_spaces: Sequence[VersionSpaceManager | None] | None = None,
+        domains: Sequence[DomainTag | None] | None = None,
     ) -> BatchDecisionResult:
-        compiled = self.compile(states, ledgers)
+        compiled = self.compile(states, ledgers, version_spaces, domains)
         engine = backend or ReferenceBackend()
         result = engine.frontier_and_score(
             compiled.pending,

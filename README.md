@@ -90,6 +90,29 @@ action = HeuristicLookaheadPolicy().select(graph, state, frontier.certified)
 print(action)  # inspect
 ```
 
+The adaptive path starts overgeneralized and earns distinctions from failures:
+
+```python
+from metamorpher import AdaptiveFailureCarver, VersionSpaceManager
+
+learner = AdaptiveFailureCarver("regime", min_branch_support=2)
+learner.observe("a1", "left", {"sensor": "A"})
+learner.observe("b1", "right", {"sensor": "B"})  # unresolved: too early
+learner.observe("a2", "left", {"sensor": "A"})
+result = learner.observe("b2", "right", {"sensor": "B"})  # carved
+
+spaces = VersionSpaceManager()
+learner.update_version_space(
+    spaces,
+    {"left": {"inspect", "left"}, "right": {"inspect", "right"}},
+)
+assert spaces.active.common_safe_actions() == {"inspect"}
+```
+
+The separator is selected only from features observed for every accumulated
+case. If no supplied feature produces stable branches, the incompatible cases
+remain one unresolved equivalence class and can wait for more data.
+
 See [`examples/basic.py`](examples/basic.py) for a runnable version.
 
 The high-level controller uses an explicit decision/commit/observe handshake:
@@ -138,6 +161,8 @@ permission to bypass a hard prerequisite.
 - `unobserved` and `censored` do not mean `absent`.
 - Contradictory observations remain in an append-only evidence history.
 - Unidentifiable cases may remain unresolved indefinitely.
+- A novel contradiction reopens the represented parent class instead of being
+  forced through whichever hypothesis happened to survive earlier evidence.
 - An unresolved equivalence class produces a common-safe action or abstention;
   it does not require an invented explanation.
 - Reusable learned claims are tagged with their domain and provenance.
@@ -178,6 +203,8 @@ single or small graphs. CUDA/Triton acceleration targets batches of many
 independent controller states where transfer and compilation costs can be
 amortized. Hard frontier masks remain discrete structural operations; floating
 point value scores never override them.
+Version-space common-safe masks are applied before accelerated selection, so a
+backend cannot resurrect an action excluded by a surviving hypothesis.
 
 Backend selection must be observationally equivalent to the reference path
 within documented numeric tolerances. Automatic selection tries Triton/CUDA,

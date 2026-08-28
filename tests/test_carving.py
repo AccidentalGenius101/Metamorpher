@@ -4,8 +4,9 @@ import unittest
 
 import _support  # noqa: F401
 
-from metamorpher.carving import FailureCarver
+from metamorpher.carving import AdaptiveFailureCarver, FailureCarver
 from metamorpher.model import ClassStatus
+from metamorpher.version_space import VersionSpaceManager
 
 
 class FailureCarvingTests(unittest.TestCase):
@@ -22,6 +23,58 @@ class FailureCarvingTests(unittest.TestCase):
         self.assertEqual(result.status, ClassStatus.UNRESOLVED)
         self.assertIsNone(result.separator_name)
         self.assertEqual(result.branches, ())
+
+
+class AdaptiveFailureCarvingTests(unittest.TestCase):
+    def test_contradiction_waits_until_observed_distinction_has_support(self) -> None:
+        learner = AdaptiveFailureCarver("cell", min_branch_support=2)
+        learner.observe("a1", "left", {"regime": "A", "noise": 1})
+        unresolved = learner.observe("b1", "right", {"regime": "B", "noise": 2})
+        self.assertEqual(unresolved.status, ClassStatus.UNRESOLVED)
+        self.assertIsNone(unresolved.separator_name)
+
+        learner.observe("a2", "left", {"regime": "A", "noise": 2})
+        carved = learner.observe("b2", "right", {"regime": "B", "noise": 1})
+        self.assertEqual(carved.status, ClassStatus.CARVED)
+        self.assertEqual(carved.separator_name, "regime")
+
+    def test_noisy_observed_features_do_not_force_a_split(self) -> None:
+        learner = AdaptiveFailureCarver(
+            "cell", min_branch_support=2, stability_threshold=0.8
+        )
+        cases = {
+            "a1": ("left", {"feature": "A"}),
+            "a2": ("right", {"feature": "A"}),
+            "b1": ("left", {"feature": "B"}),
+            "b2": ("right", {"feature": "B"}),
+        }
+        result = None
+        for evidence_id, (outcome, features) in cases.items():
+            result = learner.observe(evidence_id, outcome, features)
+        self.assertEqual(result.status, ClassStatus.UNRESOLVED)
+        self.assertIsNone(result.separator_name)
+
+    def test_supported_carve_materializes_executable_version_space(self) -> None:
+        learner = AdaptiveFailureCarver("cell", min_branch_support=2)
+        for evidence_id, outcome, regime in (
+            ("a1", "left", "A"),
+            ("a2", "left", "A"),
+            ("b1", "right", "B"),
+            ("b2", "right", "B"),
+        ):
+            learner.observe(evidence_id, outcome, {"regime": regime})
+        manager = VersionSpaceManager()
+        cell = learner.update_version_space(
+            manager,
+            {
+                "left": {"inspect", "left"},
+                "right": {"inspect", "right"},
+            },
+        )
+        self.assertIs(manager.active, cell)
+        self.assertEqual(cell.common_safe_actions(), frozenset({"inspect"}))
+        manager.observe("regime", "A", "new-case")
+        self.assertEqual(cell.common_safe_actions(), frozenset({"inspect", "left"}))
 
     def test_duplicate_evidence_is_idempotent(self) -> None:
         carver = FailureCarver("cell", min_branch_support=2)

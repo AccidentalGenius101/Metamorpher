@@ -16,6 +16,7 @@ from .model import (
     Observation,
     ObservationStatus,
     UnsafeExecutionError,
+    DomainTag,
 )
 
 
@@ -214,6 +215,223 @@ class FailureCarver:
         return self.result(
             "supplied separator met per-branch support and stability requirements"
         )
+
+
+class AdaptiveFailureCarver:
+    """Run the actual overgeneralize → fail → carve loop.
+
+    ``FailureCarver`` is intentionally a verifier: it tests one separator a
+    caller already chose.  This class integrates that verifier with accumulated
+    observed case features.  It begins with one equivalence class, preserves a
+    contradiction when no observed distinction explains it, and automatically
+    adopts the best *supported* observed separator when one becomes available.
+
+    It never synthesizes latent features or uses case identifiers as features.
+    All candidate values must have been supplied with the corresponding case.
+    """
+
+    def __init__(
+        self,
+        cell_id: str,
+        *,
+        min_branch_support: int = 10,
+        stability_threshold: float = 0.85,
+    ) -> None:
+        self.carver = FailureCarver(
+            cell_id,
+            min_branch_support=min_branch_support,
+            stability_threshold=stability_threshold,
+        )
+        self._features: dict[str, dict[str, Hashable]] = {}
+
+    @property
+    def cell_id(self) -> str:
+        return self.carver.cell_id
+
+    @property
+    def features(self) -> Mapping[str, Mapping[str, Hashable]]:
+        return {key: dict(value) for key, value in self._features.items()}
+
+    def observe(
+        self,
+        evidence_id: str,
+        outcome: Hashable,
+        observed_features: Mapping[str, Hashable],
+    ) -> CarvingResult:
+        if not evidence_id:
+            raise ValueError("evidence_id cannot be empty")
+        try:
+            hash(outcome)
+        except TypeError as exc:
+            raise TypeError("outcomes must be hashable") from exc
+        normalized = self._normalize_features(observed_features)
+        if evidence_id in self._features:
+            if self._features[evidence_id] != normalized:
+                raise ValueError(
+                    f"evidence ID {evidence_id!r} was assigned conflicting features"
+                )
+            return self.carver.observe(evidence_id, outcome)
+
+        self._features[evidence_id] = normalized
+        current = self.carver.observe(evidence_id, outcome)
+        if current.status != ClassStatus.UNRESOLVED:
+            return current
+        return self._try_observed_separators()
+
+    @staticmethod
+    def _normalize_features(
+        observed_features: Mapping[str, Hashable],
+    ) -> dict[str, Hashable]:
+        normalized: dict[str, Hashable] = {}
+        for name, value in observed_features.items():
+            clean_name = str(name).strip()
+            if not clean_name:
+                raise ValueError("observed feature names cannot be empty")
+            try:
+                hash(value)
+            except TypeError as exc:
+                raise TypeError("observed feature values must be hashable") from exc
+            normalized[clean_name] = value
+        return normalized
+
+    def _candidate_result(self, separator_name: str) -> CarvingResult:
+        candidate = FailureCarver(
+            self.cell_id,
+            min_branch_support=self.carver.min_branch_support,
+            stability_threshold=self.carver.stability_threshold,
+        )
+        for evidence_id, outcome in self.carver.records.items():
+            candidate.observe(evidence_id, outcome)
+        assignments = {
+            evidence_id: self._features[evidence_id][separator_name]
+            for evidence_id in self.carver.records
+        }
+        return candidate.try_carve(separator_name, assignments)
+
+    def _try_observed_separators(self) -> CarvingResult:
+        evidence_ids = tuple(self.carver.records)
+        if not evidence_ids:
+            return self.carver.result()
+        shared_names = set(self._features[evidence_ids[0]])
+        for evidence_id in evidence_ids[1:]:
+            shared_names.intersection_update(self._features[evidence_id])
+
+        supported: list[CarvingResult] = []
+        for separator_name in sorted(shared_names):
+            result = self._candidate_result(separator_name)
+            if result.status == ClassStatus.CARVED:
+                supported.append(result)
+        if not supported:
+            return self.carver.result(
+                "contradiction preserved; no observed separator is yet supported"
+            )
+
+        # Prefer the cleanest partition, then the simpler partition, then a
+        # stable lexical tie-break. This is deterministic and evidence-only.
+        chosen = min(
+            supported,
+            key=lambda result: (
+                -min(branch.purity for branch in result.branches),
+                len(result.branches),
+                result.separator_name or "",
+            ),
+        )
+        assignments = {
+            evidence_id: self._features[evidence_id][chosen.separator_name]
+            for evidence_id in evidence_ids
+        }
+        return self.carver.try_carve(chosen.separator_name or "", assignments)
+
+    def to_version_cell(
+        self,
+        safe_actions_by_outcome: Mapping[Hashable, Iterable[str]],
+        *,
+        domain: DomainTag | None = None,
+    ):
+        """Materialize learned distinctions as a controller version-space cell.
+
+        Before carving, incompatible outcomes remain hypotheses without an
+        invented discriminator. After carving, each supported branch carries
+        the observed separator prediction that identifies it. This is the
+        bridge from accumulated failures to executable common-safe actions.
+        """
+
+        from .version_space import Hypothesis, UnresolvedCell
+
+        current = self.carver.result()
+        missing = sorted(
+            {
+                outcome
+                for outcome in self.carver.records.values()
+                if outcome not in safe_actions_by_outcome
+            },
+            key=repr,
+        )
+        if missing:
+            raise KeyError(f"missing safe actions for outcomes: {missing!r}")
+
+        hypotheses: dict[str, Hypothesis] = {}
+        if current.status == ClassStatus.CARVED:
+            assert current.separator_name is not None
+            for index, branch in enumerate(current.branches):
+                evidence_ids = tuple(
+                    sorted(
+                        evidence_id
+                        for evidence_id, outcome in self.carver.records.items()
+                        if self._features[evidence_id][current.separator_name]
+                        == branch.separator_value
+                        and outcome == branch.dominant_outcome
+                    )
+                )
+                hypothesis_id = f"{self.cell_id}:branch:{index}"
+                hypotheses[hypothesis_id] = Hypothesis(
+                    hypothesis_id,
+                    frozenset(safe_actions_by_outcome[branch.dominant_outcome]),
+                    predictions={
+                        current.separator_name: branch.separator_value,
+                    },
+                    domain=domain,
+                    provenance=evidence_ids,
+                )
+        else:
+            for index, outcome in enumerate(
+                sorted(set(self.carver.records.values()), key=repr)
+            ):
+                evidence_ids = tuple(
+                    sorted(
+                        evidence_id
+                        for evidence_id, observed_outcome in self.carver.records.items()
+                        if observed_outcome == outcome
+                    )
+                )
+                hypothesis_id = f"{self.cell_id}:outcome:{index}"
+                hypotheses[hypothesis_id] = Hypothesis(
+                    hypothesis_id,
+                    frozenset(safe_actions_by_outcome[outcome]),
+                    domain=domain,
+                    provenance=evidence_ids,
+                )
+        if not hypotheses:
+            raise ValueError("cannot materialize a version space before any outcomes")
+        return UnresolvedCell(
+            self.cell_id,
+            hypotheses,
+            status=current.status,
+        )
+
+    def update_version_space(
+        self,
+        manager,
+        safe_actions_by_outcome: Mapping[Hashable, Iterable[str]],
+        *,
+        domain: DomainTag | None = None,
+        activate: bool = True,
+    ):
+        """Install the current learned cell into a ``VersionSpaceManager``."""
+
+        cell = self.to_version_cell(safe_actions_by_outcome, domain=domain)
+        manager.upsert(cell, activate=activate)
+        return cell
 
 
 @dataclass(frozen=True, slots=True)

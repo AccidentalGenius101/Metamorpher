@@ -96,6 +96,14 @@ If all surviving hypotheses share an action, the controller may expose that
 common-safe action. Otherwise it refines or abstains. New evidence may later
 carve the cell; it may also remain unresolved indefinitely.
 
+`AdaptiveFailureCarver` implements the online bridge. It accumulates outcomes
+under one initial equivalence class, detects incompatible outcomes, tests only
+fully observed candidate separators, and materializes a supported partition as
+an `UnresolvedCell`. Unsupported separators leave the parent unresolved. A
+later observation incompatible with a narrowed cell recomputes compatibility
+from the original represented hypotheses, allowing the class to reopen rather
+than permanently deleting alternatives.
+
 ### 7. Memory and audits
 
 Reusable claims are stored with domain tags and evidence provenance. They are
@@ -132,6 +140,11 @@ evaluation and scoring, but they must preserve:
 - non-finite score rejection;
 - CPU fallback when an accelerator environment is unavailable, and explicit
   errors for unsupported runtime shapes.
+
+The batch compiler intersects the graph frontier with each case's version-space
+common-safe set before producing backend inputs. Domain-tagged hypotheses are
+filtered by the decision domain; domain provenance is operational, not merely
+descriptive metadata.
 
 Evidence ingestion, provenance, graph transactions, and external authorization
 remain control-plane operations. See [CUDA and Triton](cuda-triton.md).

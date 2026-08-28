@@ -15,8 +15,10 @@ from metamorpher.model import (
     Constraint,
     ConstraintKind,
     ControllerState,
+    DomainTag,
     Observation,
 )
+from metamorpher.version_space import Hypothesis, UnresolvedCell, VersionSpaceManager
 from metamorpher.policy import HeuristicLookaheadPolicy
 
 
@@ -43,6 +45,56 @@ def graph_fixture() -> TypedActionGraph:
 
 
 class BatchCompilerTests(unittest.TestCase):
+    def test_version_space_masks_graph_certified_but_incompatible_actions(self) -> None:
+        graph = TypedActionGraph()
+        graph.add_node(ActionNode("inspect", "inspect", decision_value=1.0))
+        graph.add_node(ActionNode("repair", "repair", decision_value=100.0))
+        graph.validate()
+        manager = VersionSpaceManager()
+        manager.add(
+            UnresolvedCell(
+                "cell",
+                {
+                    "one": Hypothesis("one", frozenset({"inspect", "repair"})),
+                    "two": Hypothesis("two", frozenset({"inspect"})),
+                },
+            ),
+            activate=True,
+        )
+        compiler = GraphBatchCompiler(graph)
+        result = compiler.run(
+            [ControllerState()],
+            version_spaces=[manager],
+        )
+        repair_index = result.action_ids.index("repair")
+        self.assertFalse(result.backend_result.frontier[0][repair_index])
+        self.assertNotEqual(result.selected_action_ids[0], "repair")
+
+    def test_batch_version_space_respects_case_domain(self) -> None:
+        graph = TypedActionGraph()
+        graph.add_node(ActionNode("left", "left", decision_value=2.0))
+        graph.add_node(ActionNode("right", "right", decision_value=1.0))
+        graph.validate()
+        domain_a = DomainTag("A")
+        domain_b = DomainTag("B")
+        manager = VersionSpaceManager()
+        manager.add(
+            UnresolvedCell(
+                "cell",
+                {
+                    "a": Hypothesis("a", frozenset({"left"}), domain=domain_a),
+                    "b": Hypothesis("b", frozenset({"right"}), domain=domain_b),
+                },
+            ),
+            activate=True,
+        )
+        result = GraphBatchCompiler(graph).run(
+            [ControllerState(), ControllerState()],
+            version_spaces=[manager, manager],
+            domains=[domain_a, domain_b],
+        )
+        self.assertEqual(result.selected_action_ids, ("left", "right"))
+
     def setUp(self) -> None:
         self.graph = graph_fixture()
         self.compiler = GraphBatchCompiler(self.graph)

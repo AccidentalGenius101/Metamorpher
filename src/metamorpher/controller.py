@@ -273,13 +273,17 @@ class MetamorpherController:
             )
             return saved.public
 
-    def _version_snapshot(self) -> tuple[frozenset[str], tuple[str, ...]]:
+    def _version_snapshot(
+        self,
+        domain: DomainTag | None = None,
+    ) -> tuple[frozenset[str], tuple[str, ...]]:
         active = self.version_space.active
         if active is None:
             return frozenset(self.graph.nodes), ()
+        applicable = active.hypotheses_for(domain)
         return (
-            active.common_safe_actions().intersection(self.graph.nodes),
-            active.surviving_ids,
+            active.common_safe_actions(domain).intersection(self.graph.nodes),
+            tuple(sorted(applicable)),
         )
 
     def _required_probes(
@@ -408,7 +412,7 @@ class MetamorpherController:
 
             selected_domain = domain or self.default_domain
             graph_frontier = self.graph.frontier(self.state, self.evidence)
-            common_safe, hypotheses = self._version_snapshot()
+            common_safe, hypotheses = self._version_snapshot(selected_domain)
             safe_frontier = tuple(
                 sorted(set(graph_frontier.certified).intersection(common_safe))
             )
@@ -525,7 +529,7 @@ class MetamorpherController:
             raise UnsafeExecutionError("decision does not name an executable node")
 
         graph_frontier = self.graph.frontier(self.state, self.evidence)
-        common_safe, hypotheses = self._version_snapshot()
+        common_safe, hypotheses = self._version_snapshot(decision.domain)
         safe_frontier = tuple(
             sorted(set(graph_frontier.certified).intersection(common_safe))
         )

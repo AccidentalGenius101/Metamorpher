@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Connected accumulated failure evidence to automatic, evidence-supported
+  equivalence-class carving and version-space materialization.
+- Recompute narrowed version spaces from their represented parent when novel
+  contradictory evidence arrives; uninformative observations no longer count
+  toward resolution support.
+- Enforced hypothesis domain tags during controller decisions.
+- Applied version-space common-safe masks in accelerated batch compilation.
+
 ## 0.1.0 — 2026-08-28
 
 - Added typed, tri-state diagnostic-action graphs and certified frontiers.
