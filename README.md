@@ -289,6 +289,9 @@ language without claiming truth or external safety.
 For multi-sentence or conversational input, `DiscoursePerceiver` and
 `DiscourseProposer` carry observations and proposed structure through separate
 authority paths, so a suspected explanation remains quarantined.
+Generative providers can target the compact `TextProgramCompiler` language
+instead of fragile nested JSON; syntax, quotations, references, and action kinds
+are compiled and validated before the proposal reaches the graph.
 
 ## Develop
 

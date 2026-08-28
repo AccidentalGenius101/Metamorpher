@@ -251,6 +251,13 @@ latter through the existing candidate quarantine; reported uncertainty or
 speaker suspicion therefore cannot become active structure merely because a
 language model emitted it.
 
+For generative models, `TextProgramCompiler` accepts a deliberately small,
+line-oriented intermediate language: `OBSERVE`, `SUSPECT`, `ACTION`, and
+`BEFORE`. Evidence and suspicions require exact source quotations. The compiler
+rejects unknown operations, invented or ambiguous quotations, invalid enums,
+and dangling action references before producing ordinary quarantined
+Metamorpher objects. A malformed line cannot partially mutate controller state.
+
 This outer loop is an integration contract, not a claim that the reference
 package already solves perception, ontology induction, causal discovery, or
 calibrated structural learning. Implementations remain independently testable

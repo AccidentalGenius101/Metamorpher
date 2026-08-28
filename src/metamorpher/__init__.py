@@ -85,6 +85,8 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "InterpreterPerceiver": (".text", "InterpreterPerceiver"),
     "TextEvidence": (".text", "TextEvidence"),
     "TextInterpreter": (".text", "TextInterpreter"),
+    "TextProgramCompiler": (".dsl", "TextProgramCompiler"),
+    "TextProgramError": (".dsl", "TextProgramError"),
 }
 
 
@@ -172,6 +174,8 @@ __all__ = [
     "StructureLearner",
     "TextEvidence",
     "TextInterpreter",
+    "TextProgramCompiler",
+    "TextProgramError",
     "TruthValue",
     "TypedActionGraph",
     "UnresolvedCell",

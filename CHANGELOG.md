@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a fail-closed, line-oriented text-program compiler for generative model
+  proposals, with exact quotation and action-reference validation.
 - Added a one-pass discourse boundary that separates span-grounded evidence
   from quarantined actions, constraints, and hypotheses.
 - Distinguished ordinary supported observation actions from probes required to
