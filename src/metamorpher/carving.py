@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from collections import Counter, defaultdict
 from collections.abc import Hashable, Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from .graph import TypedActionGraph
 from .model import (
@@ -500,6 +500,18 @@ class AdaptiveLearningLoop:
             raise ValueError("learning batch repeats features: " + ", ".join(repeated))
 
         outcome = outcomes[0]
+        case_items = (outcome, *(by_key[key][0] for key in self.feature_keys))
+        case_domains = {item.domain for item in case_items}
+        if len(case_domains) != 1:
+            raise ValueError("learning case mixes observation domains")
+        case_domain = next(iter(case_domains))
+        if case_domain != self.domain:
+            expected = self.domain.name if self.domain is not None else "untagged"
+            observed = case_domain.name if case_domain is not None else "untagged"
+            raise ValueError(
+                f"learning case domain {observed!r} does not match loop domain "
+                f"{expected!r}"
+            )
         if outcome.value not in self.safe_actions_by_outcome:
             raise KeyError(f"no safe-action declaration for outcome {outcome.value!r}")
         features = {key: by_key[key][0].value for key in self.feature_keys}
@@ -509,6 +521,48 @@ class AdaptiveLearningLoop:
             domain=self.domain,
         )
         return result, cell
+
+
+@dataclass(slots=True)
+class AdaptiveLearningRouter:
+    """Route each complete case to one domain- and cell-specific learner."""
+
+    loops: dict[str, AdaptiveLearningLoop] = field(default_factory=dict)
+
+    def add(self, loop: AdaptiveLearningLoop) -> None:
+        cell_id = loop.learner.cell_id
+        if cell_id in self.loops:
+            raise ValueError(f"duplicate adaptive learning cell: {cell_id}")
+        self.loops[cell_id] = loop
+
+    def ingest(self, observations: Iterable[Observation]):
+        batch = tuple(observations)
+        usable_outcomes = tuple(
+            item
+            for item in batch
+            if item.status in {ObservationStatus.OBSERVED, ObservationStatus.INFERRED}
+        )
+        candidates = [
+            loop
+            for loop in self.loops.values()
+            if any(
+                item.key == loop.outcome_key and item.domain == loop.domain
+                for item in usable_outcomes
+            )
+        ]
+        if len(candidates) > 1:
+            ids = ", ".join(sorted(loop.learner.cell_id for loop in candidates))
+            raise ValueError(f"learning batch ambiguously routes to cells: {ids}")
+        if len(candidates) == 1:
+            return candidates[0].ingest(batch)
+
+        known_outcome_keys = {loop.outcome_key for loop in self.loops.values()}
+        mismatched = tuple(
+            item for item in usable_outcomes if item.key in known_outcome_keys
+        )
+        if mismatched:
+            raise ValueError("learning outcome has no matching domain/cell route")
+        return None
 
 
 @dataclass(frozen=True, slots=True)

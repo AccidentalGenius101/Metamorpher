@@ -6,6 +6,8 @@
   now automatically carve and install revised version spaces through
   `AdaptiveLearningLoop`, with atomic validation and conservative unseen-outcome
   handling.
+- Added strict domain admission, multi-cell adaptive routing, and domain-scoped
+  active version spaces to prevent cross-domain learning contamination.
 - Connected accumulated failure evidence to automatic, evidence-supported
   equivalence-class carving and version-space materialization.
 - Recompute narrowed version spaces from their represented parent when novel

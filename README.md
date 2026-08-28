@@ -115,6 +115,9 @@ case. If no supplied feature produces stable branches, the incompatible cases
 remain one unresolved equivalence class and can wait for more data.
 Configured but not-yet-observed outcomes remain live hypotheses, so the first
 successful case cannot prematurely authorize its own branch.
+Learning cases are domain-strict: the outcome and every configured feature must
+all match the loop's domain. Use `AdaptiveLearningRouter` to register independent
+cell/domain loops; the controller keeps their learned cells active per domain.
 
 See [`examples/basic.py`](examples/basic.py) for a runnable version.
 

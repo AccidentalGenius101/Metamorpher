@@ -16,6 +16,7 @@ from threading import RLock
 
 from .carving import (
     AdaptiveLearningLoop,
+    AdaptiveLearningRouter,
     ConstraintRevision,
     RevisionResult,
     apply_prepared_revisions,
@@ -76,7 +77,7 @@ class _CheckpointState:
     state: ControllerState
     version_space: VersionSpaceManager
     memory: DomainMemory
-    adaptive_learning: AdaptiveLearningLoop | None
+    adaptive_learning: AdaptiveLearningLoop | AdaptiveLearningRouter | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +121,7 @@ class MetamorpherController:
         policy: DecisionPolicy | None = None,
         trace: EventTrace | None = None,
         default_domain: DomainTag | None = None,
-        adaptive_learning: AdaptiveLearningLoop | None = None,
+        adaptive_learning: AdaptiveLearningLoop | AdaptiveLearningRouter | None = None,
     ) -> None:
         graph.validate()
         self.graph = graph
@@ -283,7 +284,7 @@ class MetamorpherController:
         self,
         domain: DomainTag | None = None,
     ) -> tuple[frozenset[str], tuple[str, ...]]:
-        active = self.version_space.active
+        active = self.version_space.active_for(domain)
         if active is None:
             return frozenset(self.graph.nodes), ()
         applicable = active.hypotheses_for(domain)
@@ -733,6 +734,7 @@ class MetamorpherController:
                         observation.key,
                         observation.value,
                         observation.id,
+                        observation.domain,
                     )
 
             # Publish the learned revision only after the previous active cell

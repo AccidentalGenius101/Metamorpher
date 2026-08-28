@@ -99,7 +99,11 @@ class GraphBatchCompiler:
             completed = [state.completed(x) for x in action_ids]
             prerequisites = [[False] * n for _ in range(n)]
             refinement: set[str] = set()
-            active_cell = version_space.active if version_space is not None else None
+            active_cell = (
+                version_space.active_for(domain)
+                if version_space is not None
+                else None
+            )
             if active_cell is None:
                 common_safe = set(action_ids)
                 represented_hypotheses: tuple[str, ...] = ()

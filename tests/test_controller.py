@@ -6,7 +6,12 @@ from dataclasses import fields, replace
 
 import _support  # noqa: F401
 
-from metamorpher.carving import AdaptiveFailureCarver, AdaptiveLearningLoop, ConstraintRevision
+from metamorpher.carving import (
+    AdaptiveFailureCarver,
+    AdaptiveLearningLoop,
+    AdaptiveLearningRouter,
+    ConstraintRevision,
+)
 from metamorpher.controller import MetamorpherController
 from metamorpher.graph import TypedActionGraph
 from metamorpher.model import (
@@ -129,6 +134,90 @@ class ControllerThreeWayTests(unittest.TestCase):
             controller.observe(Observation("result", "result", "ok", independent_audit=True))
         self.assertEqual(controller.evidence.revision, 0)
         self.assertIsNone(controller.version_space.active)
+
+    def test_cross_domain_learning_case_is_rejected_atomically(self) -> None:
+        other = DomainTag("other")
+        controller = MetamorpherController(
+            simple_graph("inspect"),
+            adaptive_learning=AdaptiveLearningLoop(
+                AdaptiveFailureCarver("case", min_branch_support=2),
+                outcome_key="result",
+                feature_keys=("sensor",),
+                safe_actions_by_outcome={"ok": {"inspect"}},
+                domain=DOMAIN,
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "does not match loop domain"):
+            controller.observe_many(
+                (
+                    Observation("result-other", "result", "ok", independent_audit=True, domain=other),
+                    Observation("sensor-other", "sensor", "B", independent_audit=True, domain=other),
+                )
+            )
+        self.assertEqual(controller.evidence.revision, 0)
+
+    def test_mixed_domain_learning_case_is_rejected_atomically(self) -> None:
+        controller = MetamorpherController(
+            simple_graph("inspect"),
+            adaptive_learning=AdaptiveLearningLoop(
+                AdaptiveFailureCarver("case", min_branch_support=2),
+                outcome_key="result",
+                feature_keys=("sensor",),
+                safe_actions_by_outcome={"ok": {"inspect"}},
+                domain=DOMAIN,
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "mixes observation domains"):
+            controller.observe_many(
+                (
+                    Observation("result-a", "result", "ok", independent_audit=True, domain=DOMAIN),
+                    Observation("sensor-none", "sensor", "A", independent_audit=True),
+                )
+            )
+        self.assertEqual(controller.evidence.revision, 0)
+
+    def test_router_keeps_domain_specific_learners_separate(self) -> None:
+        domain_b = DomainTag("B")
+        router = AdaptiveLearningRouter()
+        for cell_id, domain, outcome, action in (
+            ("cell-a", DOMAIN, "left", "left"),
+            ("cell-b", domain_b, "right", "right"),
+        ):
+            router.add(
+                AdaptiveLearningLoop(
+                    AdaptiveFailureCarver(cell_id, min_branch_support=2),
+                    outcome_key="result",
+                    feature_keys=("sensor",),
+                    safe_actions_by_outcome={outcome: {action}},
+                    domain=domain,
+                )
+            )
+        controller = MetamorpherController(
+            simple_graph("left", "right"), adaptive_learning=router
+        )
+        controller.observe_many(
+            (
+                Observation("result-a", "result", "left", independent_audit=True, domain=DOMAIN),
+                Observation("sensor-a", "sensor", "A", independent_audit=True, domain=DOMAIN),
+            )
+        )
+        controller.observe_many(
+            (
+                Observation("result-b", "result", "right", independent_audit=True, domain=domain_b),
+                Observation("sensor-b", "sensor", "B", independent_audit=True, domain=domain_b),
+            )
+        )
+        self.assertEqual(
+            controller.adaptive_learning.loops["cell-b"].learner.carver.records,
+            {"result-b": "right"},
+        )
+        self.assertEqual(
+            controller.adaptive_learning.loops["cell-a"].learner.carver.records,
+            {"result-a": "left"},
+        )
+        self.assertEqual(controller.version_space.active.id, "cell-b")
+        self.assertEqual(controller.next(DOMAIN).action_id, "left")
+        self.assertEqual(controller.next(domain_b).action_id, "right")
 
     def test_supported_action_is_selected_from_frontier(self) -> None:
         controller = MetamorpherController(simple_graph("inspect", "repair"), default_domain=DOMAIN)

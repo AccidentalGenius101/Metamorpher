@@ -111,30 +111,58 @@ class VersionSpaceManager:
     def __init__(self) -> None:
         self.cells: dict[str, UnresolvedCell] = {}
         self.active_cell_id: str | None = None
+        self._active_by_domain: dict[DomainTag, str] = {}
 
     @property
     def active(self) -> UnresolvedCell | None:
         return self.cells.get(self.active_cell_id) if self.active_cell_id else None
+
+    def active_for(self, domain: DomainTag | None) -> UnresolvedCell | None:
+        if domain is not None and domain in self._active_by_domain:
+            return self.cells.get(self._active_by_domain[domain])
+        return self.active
+
+    @staticmethod
+    def _cell_domain(cell: UnresolvedCell) -> DomainTag | None:
+        domains = {hypothesis.domain for hypothesis in cell.hypotheses.values()}
+        if len(domains) == 1:
+            return next(iter(domains))
+        return None
+
+    def _activate_cell(self, cell: UnresolvedCell) -> None:
+        self.active_cell_id = cell.id
+        domain = self._cell_domain(cell)
+        if domain is not None:
+            self._active_by_domain[domain] = cell.id
 
     def add(self, cell: UnresolvedCell, *, activate: bool = False) -> None:
         if cell.id in self.cells:
             raise ValueError(f"duplicate unresolved cell: {cell.id}")
         self.cells[cell.id] = cell
         if activate:
-            self.active_cell_id = cell.id
+            self._activate_cell(cell)
 
     def upsert(self, cell: UnresolvedCell, *, activate: bool = False) -> None:
         """Install a newly learned revision of an observational cell."""
 
         self.cells[cell.id] = cell
         if activate:
-            self.active_cell_id = cell.id
+            self._activate_cell(cell)
 
     def activate(self, cell_id: str | None) -> None:
         if cell_id is not None and cell_id not in self.cells:
             raise KeyError(cell_id)
         self.active_cell_id = cell_id
+        if cell_id is not None:
+            self._activate_cell(self.cells[cell_id])
 
-    def observe(self, test_id: str, value: Any, evidence_id: str) -> None:
-        if self.active is not None:
-            self.active.observe(test_id, value, evidence_id)
+    def observe(
+        self,
+        test_id: str,
+        value: Any,
+        evidence_id: str,
+        domain: DomainTag | None = None,
+    ) -> None:
+        active = self.active_for(domain)
+        if active is not None:
+            active.observe(test_id, value, evidence_id)

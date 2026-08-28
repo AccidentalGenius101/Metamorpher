@@ -110,6 +110,11 @@ observation batch is staged, carved, and installed atomically for subsequent
 decisions. Missing features reject the batch before evidence or controller state
 changes, while censored observations never enter learning. Declared but unseen
 outcomes remain conservative fallback hypotheses until evidence represents them.
+The ingestion boundary is domain-strict: mixed, mismatched, or unexpectedly
+untagged cases fail before mutation. `AdaptiveLearningRouter` dispatches a case
+to exactly one cell/domain learner, and `VersionSpaceManager` tracks activation
+per domain so the most recently updated regime cannot replace another regime's
+runtime uncertainty state.
 
 ### 7. Memory and audits
 
