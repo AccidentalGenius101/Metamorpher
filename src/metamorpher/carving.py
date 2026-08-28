@@ -371,6 +371,7 @@ class AdaptiveFailureCarver:
             raise KeyError(f"missing safe actions for outcomes: {missing!r}")
 
         hypotheses: dict[str, Hypothesis] = {}
+        represented_outcomes: set[Hashable] = set()
         if current.status == ClassStatus.CARVED:
             assert current.separator_name is not None
             for index, branch in enumerate(current.branches):
@@ -393,9 +394,10 @@ class AdaptiveFailureCarver:
                     domain=domain,
                     provenance=evidence_ids,
                 )
+                represented_outcomes.add(branch.dominant_outcome)
         else:
             for index, outcome in enumerate(
-                sorted(set(self.carver.records.values()), key=repr)
+                sorted(safe_actions_by_outcome, key=repr)
             ):
                 evidence_ids = tuple(
                     sorted(
@@ -411,6 +413,21 @@ class AdaptiveFailureCarver:
                     domain=domain,
                     provenance=evidence_ids,
                 )
+                represented_outcomes.add(outcome)
+
+        # A configured but not-yet-observed outcome remains a live possibility.
+        # It cannot be assigned to a separator branch without evidence, so it
+        # conservatively survives as an unpredicted fallback hypothesis.
+        for outcome in sorted(
+            set(safe_actions_by_outcome) - represented_outcomes,
+            key=repr,
+        ):
+            hypothesis_id = f"{self.cell_id}:unobserved:{repr(outcome)}"
+            hypotheses[hypothesis_id] = Hypothesis(
+                hypothesis_id,
+                frozenset(safe_actions_by_outcome[outcome]),
+                domain=domain,
+            )
         if not hypotheses:
             raise ValueError("cannot materialize a version space before any outcomes")
         return UnresolvedCell(
@@ -432,6 +449,66 @@ class AdaptiveFailureCarver:
         cell = self.to_version_cell(safe_actions_by_outcome, domain=domain)
         manager.upsert(cell, activate=activate)
         return cell
+
+
+@dataclass(slots=True)
+class AdaptiveLearningLoop:
+    """Bind complete case-level observation batches to adaptive carving."""
+
+    learner: AdaptiveFailureCarver
+    outcome_key: str
+    feature_keys: tuple[str, ...]
+    safe_actions_by_outcome: Mapping[Hashable, Iterable[str]]
+    domain: DomainTag | None = None
+
+    def __post_init__(self) -> None:
+        if not self.outcome_key.strip():
+            raise ValueError("outcome_key cannot be empty")
+        if not self.feature_keys:
+            raise ValueError("feature_keys cannot be empty")
+        if len(self.feature_keys) != len(set(self.feature_keys)):
+            raise ValueError("feature_keys cannot contain duplicates")
+        if self.outcome_key in self.feature_keys:
+            raise ValueError("outcome_key cannot also be a feature key")
+        if not self.safe_actions_by_outcome:
+            raise ValueError("safe_actions_by_outcome cannot be empty")
+
+    def ingest(self, observations: Iterable[Observation]):
+        """Learn one complete case; return ``None`` for an unrelated batch."""
+
+        usable = tuple(
+            item
+            for item in observations
+            if item.status in {ObservationStatus.OBSERVED, ObservationStatus.INFERRED}
+        )
+        outcomes = tuple(item for item in usable if item.key == self.outcome_key)
+        if not outcomes:
+            return None
+        if len(outcomes) != 1:
+            raise ValueError(
+                f"learning batch requires exactly one {self.outcome_key!r} outcome"
+            )
+        by_key: dict[str, list[Observation]] = defaultdict(list)
+        for item in usable:
+            if item.key in self.feature_keys:
+                by_key[item.key].append(item)
+        missing = tuple(key for key in self.feature_keys if not by_key[key])
+        repeated = tuple(key for key in self.feature_keys if len(by_key[key]) > 1)
+        if missing:
+            raise ValueError("learning batch is missing features: " + ", ".join(missing))
+        if repeated:
+            raise ValueError("learning batch repeats features: " + ", ".join(repeated))
+
+        outcome = outcomes[0]
+        if outcome.value not in self.safe_actions_by_outcome:
+            raise KeyError(f"no safe-action declaration for outcome {outcome.value!r}")
+        features = {key: by_key[key][0].value for key in self.feature_keys}
+        result = self.learner.observe(outcome.id, outcome.value, features)
+        cell = self.learner.to_version_cell(
+            self.safe_actions_by_outcome,
+            domain=self.domain,
+        )
+        return result, cell
 
 
 @dataclass(frozen=True, slots=True)

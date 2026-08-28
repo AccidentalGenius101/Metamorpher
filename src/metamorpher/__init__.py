@@ -54,6 +54,7 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "ObservationReceipt": (".controller", "ObservationReceipt"),
     "FailureCarver": (".carving", "FailureCarver"),
     "AdaptiveFailureCarver": (".carving", "AdaptiveFailureCarver"),
+    "AdaptiveLearningLoop": (".carving", "AdaptiveLearningLoop"),
     "CarvingResult": (".carving", "CarvingResult"),
     "CarvedBranch": (".carving", "CarvedBranch"),
     "OutcomeSupport": (".carving", "OutcomeSupport"),
@@ -88,6 +89,7 @@ def __dir__() -> list[str]:
 __all__ = [
     "ActionExecutor",
     "AdaptiveFailureCarver",
+    "AdaptiveLearningLoop",
     "ActionKind",
     "ActionNode",
     "ActionStatus",

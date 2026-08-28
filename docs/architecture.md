@@ -104,6 +104,13 @@ later observation incompatible with a narrowed cell recomputes compatibility
 from the original represented hypotheses, allowing the class to reopen rather
 than permanently deleting alternatives.
 
+`AdaptiveLearningLoop` closes that bridge inside `MetamorpherController`.
+Configured outcome and feature keys define an explicit case boundary: a complete
+observation batch is staged, carved, and installed atomically for subsequent
+decisions. Missing features reject the batch before evidence or controller state
+changes, while censored observations never enter learning. Declared but unseen
+outcomes remain conservative fallback hypotheses until evidence represents them.
+
 ### 7. Memory and audits
 
 Reusable claims are stored with domain tags and evidence provenance. They are

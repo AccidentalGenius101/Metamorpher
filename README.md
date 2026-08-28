@@ -93,25 +93,28 @@ print(action)  # inspect
 The adaptive path starts overgeneralized and earns distinctions from failures:
 
 ```python
-from metamorpher import AdaptiveFailureCarver, VersionSpaceManager
+from metamorpher import AdaptiveFailureCarver, AdaptiveLearningLoop
 
 learner = AdaptiveFailureCarver("regime", min_branch_support=2)
-learner.observe("a1", "left", {"sensor": "A"})
-learner.observe("b1", "right", {"sensor": "B"})  # unresolved: too early
-learner.observe("a2", "left", {"sensor": "A"})
-result = learner.observe("b2", "right", {"sensor": "B"})  # carved
-
-spaces = VersionSpaceManager()
-learner.update_version_space(
-    spaces,
-    {"left": {"inspect", "left"}, "right": {"inspect", "right"}},
+learning = AdaptiveLearningLoop(
+    learner,
+    outcome_key="result",
+    feature_keys=("sensor",),
+    safe_actions_by_outcome={
+        "left": {"inspect", "left"},
+        "right": {"inspect", "right"},
+    },
 )
-assert spaces.active.common_safe_actions() == {"inspect"}
+
+# Pass adaptive_learning=learning to MetamorpherController. Complete case
+# batches then carve and install the version space automatically.
 ```
 
 The separator is selected only from features observed for every accumulated
 case. If no supplied feature produces stable branches, the incompatible cases
 remain one unresolved equivalence class and can wait for more data.
+Configured but not-yet-observed outcomes remain live hypotheses, so the first
+successful case cannot prematurely authorize its own branch.
 
 See [`examples/basic.py`](examples/basic.py) for a runnable version.
 

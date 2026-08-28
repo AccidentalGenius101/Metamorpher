@@ -6,7 +6,7 @@ from dataclasses import fields, replace
 
 import _support  # noqa: F401
 
-from metamorpher.carving import ConstraintRevision
+from metamorpher.carving import AdaptiveFailureCarver, AdaptiveLearningLoop, ConstraintRevision
 from metamorpher.controller import MetamorpherController
 from metamorpher.graph import TypedActionGraph
 from metamorpher.model import (
@@ -15,6 +15,7 @@ from metamorpher.model import (
     ActionStatus,
     Constraint,
     ConstraintKind,
+    ClassStatus,
     DecisionStatus,
     DomainTag,
     InvalidGraphError,
@@ -73,6 +74,62 @@ def refinement_graph() -> TypedActionGraph:
 
 
 class ControllerThreeWayTests(unittest.TestCase):
+    def test_observation_batches_automatically_carve_and_install_version_space(self) -> None:
+        learning = AdaptiveLearningLoop(
+            AdaptiveFailureCarver("regime", min_branch_support=2),
+            outcome_key="result",
+            feature_keys=("sensor",),
+            safe_actions_by_outcome={"left": {"left"}, "right": {"right"}},
+            domain=DOMAIN,
+        )
+        controller = MetamorpherController(
+            simple_graph("left", "right"),
+            adaptive_learning=learning,
+            default_domain=DOMAIN,
+        )
+        controller.observe_many(
+            (
+                Observation("first-result", "result", "left", independent_audit=True, domain=DOMAIN),
+                Observation("first-sensor", "sensor", "A", independent_audit=True, domain=DOMAIN),
+            )
+        )
+        self.assertEqual(
+            controller.version_space.active.common_safe_actions(DOMAIN),
+            frozenset(),
+            "an unobserved declared outcome must still constrain provisional safety",
+        )
+        for index, (outcome, sensor) in enumerate(
+            (("right", "B"), ("left", "A"), ("right", "B"))
+        ):
+            controller.observe_many(
+                (
+                    Observation(f"result-{index}", "result", outcome, independent_audit=True, domain=DOMAIN),
+                    Observation(f"sensor-{index}", "sensor", sensor, independent_audit=True, domain=DOMAIN),
+                )
+            )
+
+        self.assertEqual(controller.version_space.active.status, ClassStatus.CARVED)
+        self.assertEqual(controller.next().status, DecisionStatus.ABSTAIN)
+        controller.observe(
+            Observation("current-sensor", "sensor", "A", independent_audit=True, domain=DOMAIN)
+        )
+        self.assertEqual(controller.next().action_id, "left")
+
+    def test_incomplete_learning_case_is_rejected_atomically(self) -> None:
+        controller = MetamorpherController(
+            simple_graph("inspect"),
+            adaptive_learning=AdaptiveLearningLoop(
+                AdaptiveFailureCarver("case", min_branch_support=2),
+                outcome_key="result",
+                feature_keys=("sensor",),
+                safe_actions_by_outcome={"ok": {"inspect"}},
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "missing features"):
+            controller.observe(Observation("result", "result", "ok", independent_audit=True))
+        self.assertEqual(controller.evidence.revision, 0)
+        self.assertIsNone(controller.version_space.active)
+
     def test_supported_action_is_selected_from_frontier(self) -> None:
         controller = MetamorpherController(simple_graph("inspect", "repair"), default_domain=DOMAIN)
         decision = controller.next()

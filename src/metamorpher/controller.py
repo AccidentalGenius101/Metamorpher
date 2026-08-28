@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from threading import RLock
 
 from .carving import (
+    AdaptiveLearningLoop,
     ConstraintRevision,
     RevisionResult,
     apply_prepared_revisions,
@@ -75,6 +76,7 @@ class _CheckpointState:
     state: ControllerState
     version_space: VersionSpaceManager
     memory: DomainMemory
+    adaptive_learning: AdaptiveLearningLoop | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +120,7 @@ class MetamorpherController:
         policy: DecisionPolicy | None = None,
         trace: EventTrace | None = None,
         default_domain: DomainTag | None = None,
+        adaptive_learning: AdaptiveLearningLoop | None = None,
     ) -> None:
         graph.validate()
         self.graph = graph
@@ -128,6 +131,7 @@ class MetamorpherController:
         self.policy = policy or HeuristicLookaheadPolicy()
         self.trace = trace or EventTrace()
         self.default_domain = default_domain or DomainTag("default")
+        self.adaptive_learning = adaptive_learning
         self._sequence = 0
         self._checkpoint_sequence = 0
         self._checkpoints: dict[str, _CheckpointState] = {}
@@ -192,6 +196,7 @@ class MetamorpherController:
                 state=copy.deepcopy(self.state),
                 version_space=copy.deepcopy(self.version_space),
                 memory=copy.deepcopy(self.memory),
+                adaptive_learning=copy.deepcopy(self.adaptive_learning),
             )
             self.trace.append("checkpoint_created", checkpoint=public)
             return public
@@ -261,6 +266,7 @@ class MetamorpherController:
             self.state = copy.deepcopy(saved.state)
             self.version_space = copy.deepcopy(saved.version_space)
             self.memory = copy.deepcopy(saved.memory)
+            self.adaptive_learning = copy.deepcopy(saved.adaptive_learning)
             self._issued = None
             self._committed = None
             self.trace.append(
@@ -702,6 +708,12 @@ class MetamorpherController:
                 revision_batch,
                 prospective_observations,
             )
+            staged_learning = copy.deepcopy(self.adaptive_learning)
+            learned = (
+                staged_learning.ingest(observation_batch)
+                if staged_learning is not None
+                else None
+            )
 
             for observation in observation_batch:
                 if not self.evidence.append(observation):
@@ -722,6 +734,21 @@ class MetamorpherController:
                         observation.value,
                         observation.id,
                     )
+
+            # Publish the learned revision only after the previous active cell
+            # consumed this batch. Otherwise the training case would
+            # immediately narrow the new global class to its own branch.
+            if learned is not None:
+                learning_result, learned_cell = learned
+                self.adaptive_learning = staged_learning
+                self.version_space.upsert(learned_cell, activate=True)
+                self.trace.append(
+                    "adaptive_class_updated",
+                    cell_id=learned_cell.id,
+                    status=learning_result.status,
+                    support=learning_result.support,
+                    separator_name=learning_result.separator_name,
+                )
 
             if action_id is not None and resulting_status is not None:
                 self.state.action_status[action_id] = resulting_status

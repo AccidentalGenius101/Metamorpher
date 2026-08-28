@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Closed the runtime learning loop: complete controller observation batches can
+  now automatically carve and install revised version spaces through
+  `AdaptiveLearningLoop`, with atomic validation and conservative unseen-outcome
+  handling.
 - Connected accumulated failure evidence to automatic, evidence-supported
   equivalence-class carving and version-space materialization.
 - Recompute narrowed version spaces from their represented parent when novel
