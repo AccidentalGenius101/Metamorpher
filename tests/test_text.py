@@ -2,9 +2,20 @@ from __future__ import annotations
 
 import unittest
 
+import _support  # noqa: F401
+
 from metamorpher import (
     ActionNode,
+    ActionKind,
+    CandidateStructure,
+    ClaimTier,
+    CognitiveLoop,
+    Constraint,
+    ConstraintKind,
     DecisionStatus,
+    DiscourseInterpretation,
+    DiscoursePerceiver,
+    DiscourseProposer,
     DomainTag,
     EvidenceLedger,
     GroundedTextRenderer,
@@ -12,6 +23,7 @@ from metamorpher import (
     MetamorpherController,
     TextEvidence,
     TypedActionGraph,
+    Hypothesis,
 )
 
 
@@ -59,6 +71,83 @@ class TextBoundaryTests(unittest.TestCase):
         )
         self.assertIn("abstains", rendered)
         self.assertNotIn("None", rendered)
+
+    def test_discourse_keeps_suspicion_quarantined_and_selects_inspection(self) -> None:
+        domain = DomainTag("engine")
+        text = "It might be the gasket, but I never inspected the bolts."
+
+        class Discourse:
+            def interpret_discourse(self, source, selected_domain):
+                start = source.index("never inspected the bolts")
+                return DiscourseInterpretation(
+                    evidence=(
+                        TextEvidence(
+                            "fasteners_inspected",
+                            False,
+                            start,
+                            start + len("never inspected the bolts"),
+                        ),
+                    ),
+                    candidates=CandidateStructure(
+                        nodes=(
+                            ActionNode(
+                                "inspect_fasteners",
+                                "Inspect manifold fasteners",
+                                ActionKind.OBSERVE,
+                                information_value=10.0,
+                            ),
+                            ActionNode(
+                                "replace_gasket",
+                                "Replace manifold gasket",
+                                ActionKind.REPAIR,
+                                cost=10.0,
+                            ),
+                        ),
+                        constraints=(
+                            Constraint(
+                                "inspect-before-replace",
+                                ConstraintKind.HARD_PREREQUISITE,
+                                ("inspect_fasteners",),
+                                "replace_gasket",
+                                tier=ClaimTier.CANDIDATE,
+                            ),
+                        ),
+                        hypotheses=(
+                            Hypothesis(
+                                "gasket_failed",
+                                frozenset({"inspect_fasteners"}),
+                                domain=selected_domain,
+                                provenance=("speaker_suspicion",),
+                            ),
+                        ),
+                        rationale="speaker suspects a gasket but reports no inspection",
+                    ),
+                )
+
+        class NoExecution:
+            def execute(self, decision):
+                raise AssertionError("not executed")
+
+        controller = MetamorpherController(TypedActionGraph(), default_domain=domain)
+        loop = CognitiveLoop(
+            controller,
+            executor=NoExecution(),
+            perceiver=DiscoursePerceiver(Discourse()),
+            proposer=DiscourseProposer(),
+        )
+        ingestion = loop.ingest(text, domain)
+        decision = controller.next()
+        self.assertEqual(decision.status, DecisionStatus.SUPPORTED_UNDER_MODEL)
+        self.assertEqual(decision.action_id, "inspect_fasteners")
+        self.assertNotEqual(decision.action_id, "replace_gasket")
+        self.assertIsNone(controller.version_space.active)
+        self.assertTrue(
+            any(cell_id.startswith("candidate-cell-") for cell_id in controller.version_space.cells)
+        )
+        self.assertEqual(
+            ingestion.proposal.hypotheses[0].provenance,
+            ("speaker_suspicion",),
+        )
 
 
 if __name__ == "__main__":

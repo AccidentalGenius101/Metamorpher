@@ -244,6 +244,13 @@ does not convert `supported_under_model` into a claim of truth or physical
 safety. Provider-specific language models can implement `TextInterpreter`
 without becoming dependencies of the control kernel.
 
+`DiscoursePerceiver` raises the boundary from isolated claims to candidate
+structure. One interpreter pass returns span-grounded evidence separately from
+possible actions, constraints, and hypotheses. `DiscourseProposer` forwards the
+latter through the existing candidate quarantine; reported uncertainty or
+speaker suspicion therefore cannot become active structure merely because a
+language model emitted it.
+
 This outer loop is an integration contract, not a claim that the reference
 package already solves perception, ontology induction, causal discovery, or
 calibrated structural learning. Implementations remain independently testable

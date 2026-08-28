@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from .cognition import Perception
+from .cognition import CandidateStructure, Perception
 from .evidence import EvidenceLedger
 from .graph import TypedActionGraph
 from .model import Decision, DecisionStatus, DomainTag, Observation, ObservationStatus
@@ -31,6 +31,20 @@ class TextInterpreter(Protocol):
     def interpret(
         self, text: str, domain: DomainTag, context: Mapping[str, Any]
     ) -> Sequence[TextEvidence]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DiscourseInterpretation:
+    """Separate grounded observations from untrusted proposed structure."""
+
+    evidence: tuple[TextEvidence, ...] = ()
+    candidates: CandidateStructure | None = None
+
+
+class DiscourseInterpreter(Protocol):
+    def interpret_discourse(
+        self, text: str, domain: DomainTag
+    ) -> DiscourseInterpretation: ...
 
 
 class InterpreterPerceiver:
@@ -90,6 +104,48 @@ class InterpreterPerceiver:
             "spans": tuple(spans),
         }
         return Perception(tuple(observations), representation, self.source)
+
+
+class DiscoursePerceiver:
+    """Run one discourse pass and carry its candidate structure to proposal."""
+
+    def __init__(self, interpreter: DiscourseInterpreter, *, source: str = "text") -> None:
+        self.interpreter = interpreter
+        self.source = source
+
+    def perceive(
+        self,
+        raw_input: Any,
+        domain: DomainTag,
+        *,
+        action_token: str | None = None,
+    ) -> Perception:
+        if not isinstance(raw_input, str):
+            raise TypeError("DiscoursePerceiver requires text input")
+        interpretation = self.interpreter.interpret_discourse(raw_input, domain)
+
+        class EvidenceOnly:
+            def interpret(inner_self, text, selected_domain, context):
+                return interpretation.evidence
+
+        perception = InterpreterPerceiver(
+            EvidenceOnly(), source=self.source
+        ).perceive(raw_input, domain, action_token=action_token)
+        representation = {
+            **dict(perception.representation),
+            "candidate_structure": interpretation.candidates,
+        }
+        return Perception(perception.observations, representation, perception.source)
+
+
+class DiscourseProposer:
+    """Forward only the quarantined structure produced during perception."""
+
+    def propose(self, context, observations, domain) -> CandidateStructure:
+        candidate = context.get("representation", {}).get("candidate_structure")
+        if not isinstance(candidate, CandidateStructure):
+            raise ValueError("discourse perception produced no candidate structure")
+        return candidate
 
 
 class GroundedTextRenderer:

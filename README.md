@@ -286,6 +286,9 @@ Text providers can implement `TextInterpreter` and use `InterpreterPerceiver`
 to turn source-span-anchored claims into ordinary cognitive-loop observations.
 `GroundedTextRenderer` converts decisions back into deliberately model-relative
 language without claiming truth or external safety.
+For multi-sentence or conversational input, `DiscoursePerceiver` and
+`DiscourseProposer` carry observations and proposed structure through separate
+authority paths, so a suspected explanation remains quarantined.
 
 ## Develop
 

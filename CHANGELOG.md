@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a one-pass discourse boundary that separates span-grounded evidence
+  from quarantined actions, constraints, and hypotheses.
 - Distinguished ordinary supported observation actions from probes required to
   resolve an explicit uncertainty; action kind alone no longer forces a
   `refinement_required` decision.
