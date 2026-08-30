@@ -1,4 +1,4 @@
-"""Hidden-dimension benchmark for evidence-gated representational expansion.
+"""Mechanism benchmark for evidence-gated adoption of a supplied coordinate.
 
 The parent model sees phase coordinates on a circle.  Some worlds also move
 along an unrepresented axial coordinate, producing a helix.  A candidate
@@ -6,7 +6,9 @@ expansion may add cycle index, but it is promoted only when parent residuals are
 structured and held-out evidence supports a prospective improvement.
 
 This is a synthetic mechanism test, not evidence of real-world ontology
-discovery.  The candidate missing coordinate is supplied to the experiment.
+discovery.  Cycle index is the exact generating coordinate and is supplied to
+the experiment.  Return evaluation uses an oracle regime label to select the
+retained parent; autonomous routing is out of scope.
 """
 
 from __future__ import annotations
@@ -162,8 +164,9 @@ def run_world(
     future = make_dataset(
         rng, range(8, 12), phases_per_cycle=phases_per_cycle, drift=drift, noise=noise
     )
-    # Return to the parent regime after the shifted segment.  Keeping the parent
-    # projection permits scoped routing; destructive replacement does not.
+    # Return to the parent regime after the shifted segment. The benchmark uses
+    # an oracle regime label to select the retained parent here; it does not test
+    # autonomous return routing.
     returned_parent = make_dataset(
         rng, range(12, 16), phases_per_cycle=phases_per_cycle, drift=0.0, noise=noise
     )
@@ -215,7 +218,7 @@ def run_world(
                         True,
                         source="synthetic-held-out-evaluator",
                         domain=DOMAIN,
-                        independent_audit=True,
+                        independent_audit=False,
                     ),
                 ),
             )
