@@ -344,6 +344,19 @@ learner, not coordinate discovery or end-to-end ontology expansion.
 See [`docs/hidden-dimension-experiment.md`](docs/hidden-dimension-experiment.md)
 for the protocol, default result, sensitivity boundary, and limitations.
 
+Run the decision-gated expansion mechanism test with:
+
+```bash
+python experiments/decision_gated_expansion.py --seeds 100
+```
+
+It promotes the same supplied helix coordinate in two worlds, then uses the
+existing common-safe-action intersection to distinguish a predictive-only
+dimension from one that must be resolved for control. The coordinate and
+action consequences are supplied; the benchmark does not discover either.
+See
+[`docs/decision-gated-expansion-experiment.md`](docs/decision-gated-expansion-experiment.md).
+
 Run the neural continual-replay mechanism test with:
 
 ```bash
