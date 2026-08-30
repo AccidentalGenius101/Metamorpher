@@ -282,6 +282,16 @@ structure learning, external execution, and domain-bounded structural capsules.
 constraints quarantined and the controller's commit boundary intact. See the
 "Developmental outer loop" section of [`docs/architecture.md`](docs/architecture.md).
 
+The representational-expansion contract extends that boundary without claiming
+automatic ontology discovery. `RepresentationBoundary` records demonstrated
+scope and structured residuals separately from claim truth.
+`ExpansionCapsule` records a proposed new distinction, a projection that must
+preserve supported parent constraints, and prospective observations that could
+discriminate the expansion. `ExpansionRegistry` keeps the proposal quarantined
+until matching domain-bound evidence is supplied; a detailed or elegant
+proposal cannot authorize itself. `LocalEvidencePacket` routes rare credible
+prediction failures by conditional attention value instead of majority vote.
+
 Text providers can implement `TextInterpreter` and use `InterpreterPerceiver`
 to turn source-span-anchored claims into ordinary cognitive-loop observations.
 `GroundedTextRenderer` converts decisions back into deliberately model-relative
