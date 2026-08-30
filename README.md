@@ -344,6 +344,18 @@ learner, not coordinate discovery or end-to-end ontology expansion.
 See [`docs/hidden-dimension-experiment.md`](docs/hidden-dimension-experiment.md)
 for the protocol, default result, sensitivity boundary, and limitations.
 
+Run the neural continual-replay mechanism test with:
+
+```bash
+python experiments/continual_replay.py --seeds 20
+```
+
+The benchmark trains one small NumPy MLP on recurring nonlinear regions without
+a task ID and compares current-only SGD with reservoir-random and
+loss-prioritized replay under equal training compute. It is a domain-incremental
+baseline, not evidence of task discovery or end-to-end Metamorpher integration.
+See [`docs/continual-replay-experiment.md`](docs/continual-replay-experiment.md).
+
 ## License
 
 Apache License 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Project
