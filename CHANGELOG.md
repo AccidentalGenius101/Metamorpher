@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a no-task-ID neural competence-boundary benchmark with persistent local
+  contradiction detection, candidate rollback, abstention, and a clearly
+  privileged hidden-context oracle.
 - Restored qualified, frozen primitive composition with contributor-set routing
   and append-only local primitive growth from the original Metamorpher design.
 - Added a fail-closed, line-oriented text-program compiler for generative model
