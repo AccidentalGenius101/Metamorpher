@@ -143,6 +143,44 @@ control the evidence used to validate itself.
 Audits reduce self-confirming blindness but add cost. An unaudited outcome is
 censored, not evidence that a hidden constraint is absent.
 
+### 8. Representational expansion
+
+Ordinary version-space narrowing assumes that the useful distinction is
+expressible in the supplied vocabulary. When every supported carving leaves a
+structured residual, Metamorpher may preserve that failure without declaring
+the parent representation simply false.
+
+`RepresentationBoundary` separates model adequacy from claim truth. It records
+the representation's demonstrated contexts, preserved constraints, evidence,
+and residual signatures. Its statuses distinguish adequate-in-scope from
+predictive-but-incomplete and unresolved-in-vocabulary states.
+
+`ExpansionCapsule` is the outer-loop analogue of a constraint revision:
+
+- the parent and proposed representation;
+- the constraints that must survive the projection;
+- structured residuals that motivate investigation;
+- the proposed new distinctions;
+- prospective observations that discriminate the expansion;
+- evidence acquired only after proposal.
+
+The capsule enters `ExpansionRegistry` quarantined. Promotion requires usable,
+domain-matching observations for every discriminating prediction. Rationale,
+compression, proposal size, and generator confidence are not evidence. In other
+words, attention may increase a hypothesis's resolution without increasing its
+authority.
+
+This contract does not generate new ontologies by itself. A human, LLM, program
+synthesizer, or other proposer may construct a candidate expansion. The kernel
+only makes preservation, discrimination, provenance, and promotion inspectable.
+
+For distributed learning, `LocalEvidencePacket` carries context, a violated
+prediction, residuals, evidence provenance, a proposed distinction, and an
+optional reproduction target. Packet routing is deliberately non-voting: many
+expected confirmations cannot erase one surprising, reliable, locally
+privileged failure. Such a failure earns investigation, not automatic global
+revision.
+
 ## Model-relative decision state
 
 A high-level decision carries:
