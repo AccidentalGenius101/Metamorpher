@@ -358,6 +358,17 @@ back for replay. It is a domain-incremental baseline, not evidence of task
 discovery or end-to-end Metamorpher integration.
 See [`docs/continual-replay-experiment.md`](docs/continual-replay-experiment.md).
 
+Run the competence-boundary mechanism test with:
+
+```bash
+python experiments/competence_boundary.py --seeds 20
+```
+
+This adds an inverted-label regime on observationally indistinguishable XOR
+inputs and tests persistent contradiction detection, rollback, and abstention.
+The privileged task-routed oracle is reported only as an upper bound. See
+[`docs/competence-boundary-experiment.md`](docs/competence-boundary-experiment.md).
+
 ## License
 
 Apache License 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Project
