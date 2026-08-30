@@ -1,8 +1,8 @@
 # Hidden-dimension expansion experiment
 
-This synthetic mechanism test asks whether evidence-gated expansion can retain
-a valid circular parent representation while adding axial displacement when
-future observations come from a helix.
+This synthetic mechanism test asks whether evidence gates can control adoption
+of a supplied cycle coordinate while retaining a valid circular parent model
+when future observations come from a helix.
 
 ## Protocol
 
@@ -12,12 +12,16 @@ future observations come from a helix.
 - The always-expand baseline receives traversal count immediately.
 - The gated learner proposes traversal count only when parent residuals covary
   with it, then promotes the expansion only if it improves held-out cycles.
-- A final segment returns to the parent regime. Scoped routing uses the retained
-  parent; destructive replacement continues using the helix model.
+- A final segment returns to the parent regime. An oracle regime label manually
+  selects the retained parent; destructive replacement continues using the
+  helix model.
 
-The experiment supplies traversal count as a candidate coordinate. It tests the
-control and preservation semantics of expansion, not autonomous discovery of a
-never-represented variable.
+Traversal count is the exact generating coordinate and is supplied to residual
+analysis, expanded-model fitting, validation, and prediction. The experiment
+therefore tests gated adoption of a supplied feature and registry bookkeeping
+around an external NumPy learner. It does not test latent-coordinate discovery,
+candidate selection, autonomous return routing, or end-to-end representational
+expansion.
 
 ## Default result
 
@@ -38,12 +42,13 @@ standard deviation 0.05, 16 phase observations per traversal.
 | Helix future MSE, gated expansion | 0.00291 |
 | Helix future MSE, always expanded | 0.00291 |
 | Circle future MSE, fixed/gated | 0.00261 |
-| Parent-return MSE, scoped projection | 0.00262 |
+| Parent-return MSE, oracle-selected retained parent | 0.00262 |
 | Parent-return MSE, destructive replacement | 22.4167 |
 
-Under this configuration, gating recovers the supplied missing coordinate,
-matches the always-expanded predictor in helix worlds, does not expand circle
-worlds, and preserves the parent predictor for the return segment.
+Under this configuration, gating adopts the supplied coordinate, matches the
+always-expanded predictor in helix worlds, does not expand circle worlds, and
+retains a parent predictor that performs well when an oracle selects it for the
+return segment.
 
 ## Sensitivity boundary
 
