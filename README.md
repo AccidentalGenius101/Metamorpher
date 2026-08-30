@@ -336,10 +336,11 @@ python experiments/hidden_dimension_expansion.py --seeds 100
 
 The parent model receives circular phase coordinates; helix worlds introduce an
 axial displacement that the parent cannot express. The benchmark compares a
-fixed parent, an always-expanded model, and evidence-gated expansion. It also
-returns to the parent regime to measure whether scoped projection preserves the
-old behavior. This supplies the candidate missing coordinate and therefore
-tests expansion control, not autonomous ontology discovery.
+fixed parent, an always-expanded model, and evidence-gated adoption of a
+supplied cycle coordinate. It retains the parent and uses an oracle regime label
+to select it on a return segment; it does not test autonomous return routing.
+The experiment tests expansion-control bookkeeping around an external NumPy
+learner, not coordinate discovery or end-to-end ontology expansion.
 See [`docs/hidden-dimension-experiment.md`](docs/hidden-dimension-experiment.md)
 for the protocol, default result, sensitivity boundary, and limitations.
 
