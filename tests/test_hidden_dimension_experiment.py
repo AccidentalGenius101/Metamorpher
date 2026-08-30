@@ -5,9 +5,10 @@ import unittest
 import _support  # noqa: F401
 
 try:
-    from experiments.hidden_dimension_expansion import run_benchmark
+    from experiments.hidden_dimension_expansion import run_benchmark, run_world
 except ImportError:  # pragma: no cover - NumPy is an optional experiment extra.
     run_benchmark = None
+    run_world = None
 
 
 @unittest.skipIf(run_benchmark is None, "NumPy experiment dependency unavailable")
@@ -17,7 +18,19 @@ class HiddenDimensionExperimentTests(unittest.TestCase):
         self.assertGreaterEqual(summary["helix_expansion_detection_rate"], 0.9)
         self.assertLessEqual(summary["circle_false_expansion_rate"], 0.1)
 
-    def test_expansion_improves_future_prediction_and_preserves_parent(self) -> None:
+    def test_proposal_is_rejected_without_held_out_improvement(self) -> None:
+        result = run_world(
+            100_000,
+            drift=0.35,
+            noise=0.05,
+            phases_per_cycle=16,
+            correlation_threshold=0.65,
+            improvement_ratio=0.0,
+        )
+        self.assertTrue(result.expansion_proposed)
+        self.assertFalse(result.expansion_promoted)
+
+    def test_expansion_improves_future_prediction_and_retains_parent(self) -> None:
         _, summary = run_benchmark(seeds=10)
         self.assertLess(
             summary["helix_gated_future_mse"],
