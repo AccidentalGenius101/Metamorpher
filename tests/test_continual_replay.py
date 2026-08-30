@@ -22,7 +22,7 @@ class ContinualReplayTests(unittest.TestCase):
     def test_replay_improves_retention_under_fixed_compute(self) -> None:
         _, summary = run_benchmark(seeds=8)
         no_replay = summary["none"]
-        for method in ("random", "prioritized"):
+        for method in ("random", "prioritized", "gated"):
             replay = summary[method]
             self.assertGreater(
                 replay["final_average_accuracy"],
@@ -32,6 +32,14 @@ class ContinualReplayTests(unittest.TestCase):
                 replay["mean_forgetting"],
                 no_replay["mean_forgetting"] - 0.07,
             )
+
+    def test_gating_uses_less_replay_than_always_replay(self) -> None:
+        _, summary = run_benchmark(seeds=8)
+        gated = summary["gated"]
+        always = summary["prioritized"]
+        self.assertGreater(gated["rejected_candidate_batches"], 0)
+        self.assertGreater(gated["replay_examples"], 0)
+        self.assertLess(gated["replay_examples"], always["replay_examples"] * 0.65)
 
     def test_reservoir_memory_remains_bounded(self) -> None:
         import numpy as np
