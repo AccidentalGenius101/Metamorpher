@@ -2,7 +2,9 @@
 
 This mechanism benchmark trains a small NumPy multilayer perceptron on a
 recurring nonlinear stream and compares no replay, reservoir-random replay, and
-loss-prioritized replay.
+loss-prioritized replay. An evidence-gated method additionally treats each
+current-only update as a candidate and measures its effect on retained evidence
+before deciding whether replay is warranted.
 
 ## Question
 
@@ -24,14 +26,18 @@ autonomous discovery of an unobserved context.
 ## Controlled comparison
 
 All methods receive identical generated streams, evaluation sets, model
-initialization, optimizer, batch size, number of gradient updates, and model
-capacity. Each update contains 16 current examples plus 16 examples allocated
-as follows:
+initialization, optimizer, and model capacity. The three fixed policies use the
+same batch size and number of gradient updates. Each fixed-policy update
+contains 16 current examples plus 16 examples allocated as follows:
 
 - **No replay:** repeat current examples to hold training compute constant.
 - **Random replay:** sample uniformly from a 96-example reservoir.
 - **Prioritized replay:** sample from the same reservoir in proportion to the
   square root of each example's last measured loss.
+- **Evidence-gated replay:** apply one candidate current-only gradient step,
+  audit a uniform held-out memory sample, and continue current-only training if
+  retained loss remains stable. If relative retained loss rises by more than
+  1%, roll back the candidate and train the batch with prioritized replay.
 
 Both replay methods use identical reservoir replacement. This isolates sampling
 policy from memory membership. Priorities are deliberately simple and may be
@@ -63,6 +69,33 @@ Under this configuration, both bounded replay policies improve final retention
 over current-only online SGD. Prioritized replay is modestly better on the
 reported seeds at the tight memory budget. The tests require replay to improve
 retention; they do not require prioritized replay to beat random replay.
+
+## Evidence-gated result
+
+The gated method does not assume that replay is always valuable. It spends one
+probe gradient on a candidate update, uses an audit sample only to measure
+retained loss, and rolls the candidate back before replay when the damage gate
+fires. Audit examples are never used as training examples unless separately
+sampled through the replay policy.
+
+The benchmark also reports replay examples, audit examples, total gradient
+updates, and rejected candidate batches. This exposes the complete trade-off:
+gating can reduce replay bandwidth while spending additional forward-only audit
+passes and probe gradients. It should not be described as a free compute
+reduction.
+
+Across 100 seeds, the default gate produced:
+
+| Method | Final average accuracy | Mean forgetting | Replay examples | Audit examples | Gradient updates |
+|---|---:|---:|---:|---:|---:|
+| Always prioritized | 0.7312 | 0.0508 | 3,824 | 0 | 720 |
+| Evidence-gated prioritized | 0.7269 | 0.0631 | 1,842 | 22,944 | 835 |
+
+The gate therefore retains nearly the final accuracy of always-prioritized
+replay while using about 52% fewer replay training examples. It pays for that
+reduction with many cheap forward audit evaluations and about 16% more gradient
+updates. Whether this is preferable depends on the relative cost of memory
+retrieval, forward evaluation, and backpropagation in the target system.
 
 ## Scope and next boundary
 
