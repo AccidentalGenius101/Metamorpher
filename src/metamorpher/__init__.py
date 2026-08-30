@@ -39,6 +39,17 @@ from .model import (
     TruthValue,
 )
 from .policy import DecisionPolicy, HeuristicLookaheadPolicy
+from .representation import (
+    DiscriminatingPrediction,
+    ExpansionCapsule,
+    ExpansionRegistry,
+    ExpansionStatus,
+    LocalEvidencePacket,
+    ProjectionMapping,
+    RepresentationBoundary,
+    RepresentationStatus,
+    ResidualSignature,
+)
 from .version_space import Hypothesis, UnresolvedCell, VersionSpaceManager
 
 try:
@@ -157,6 +168,9 @@ __all__ = [
     "DiscoursePerceiver",
     "DiscourseProposer",
     "EvidenceLedger",
+    "ExpansionCapsule",
+    "ExpansionRegistry",
+    "ExpansionStatus",
     "ExecutionResult",
     "FailureCarver",
     "FrontierResult",
@@ -173,9 +187,12 @@ __all__ = [
     "ObservationSource",
     "ObservationStatus",
     "OutcomeSupport",
+    "DiscriminatingPrediction",
+    "LocalEvidencePacket",
     "Perceiver",
     "Perception",
     "Proposer",
+    "ProjectionMapping",
     "PrimitiveCall",
     "PrimitiveComposer",
     "PrimitiveDiscourseInterpreter",
@@ -187,6 +204,9 @@ __all__ = [
     "RelevanceProposer",
     "ResolvedFact",
     "RevisionResult",
+    "RepresentationBoundary",
+    "RepresentationStatus",
+    "ResidualSignature",
     "StructuralCapsule",
     "StructureLearner",
     "TextEvidence",
