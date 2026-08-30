@@ -28,6 +28,28 @@ state. Evidence, graph epochs, unresolved cells, domain memory, and audit histor
 accumulate. The implementation models that history explicitly instead of
 requiring a geometric metaphor.
 
+## Canonical logical knowledge state
+
+The evolving knowledge state is one logical tuple rather than whichever
+registry a caller happens to inspect:
+
+```text
+K(t) = (represented structure, accepted evidence, unresolved hypotheses,
+        control state, accumulated learner state)
+```
+
+The tuple is currently implemented by `TypedActionGraph`, `EvidenceLedger`,
+`VersionSpaceManager`, `ControllerState`, and the configured adaptive learner.
+Memory summaries, frontiers, decisions, traces, receipts, audits, and replay
+records have derived or supporting roles. Candidate structure, constraint
+revisions, expansion capsules, residual packets, primitive calls, and stored
+capsules remain proposed or quarantined until an authorized transition installs
+their effects.
+
+This is a logical model, not a new public aggregate in version 0.1. See
+[Canonical logical knowledge state](knowledge-state.md) for the complete object
+map, transition rules, authority boundaries, and refactoring invariants.
+
 ## Layers
 
 ### 1. Candidate proposal

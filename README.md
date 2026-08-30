@@ -179,6 +179,12 @@ permission to bypass a hard prerequisite.
 These invariants make failure modes visible; they do not make an incomplete or
 incorrect model true.
 
+The graph, evidence ledger, active version spaces, action/control state, and
+adaptive learner together form one canonical logical knowledge state. Memory,
+decisions, traces, proposals, expansion capsules, and other registries have
+explicit derived, diagnostic, or quarantined roles; none is a competing source
+of truth. See [Canonical logical knowledge state](docs/knowledge-state.md).
+
 ## Architecture
 
 ```mermaid
