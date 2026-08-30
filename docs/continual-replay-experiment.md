@@ -102,7 +102,6 @@ retrieval, forward evaluation, and backpropagation in the target system.
 This establishes a real neural online-learning baseline, not the full
 Metamorpher continual-learning architecture. It does not yet include:
 
-- evidence-gated model updates;
 - competence-boundary detection;
 - learned context or task discovery;
 - offline consolidation;
@@ -110,7 +109,7 @@ Metamorpher continual-learning architecture. It does not yet include:
 - adaptive memory allocation;
 - integration with the canonical logical knowledge state.
 
-The next integration experiment should expose prediction failures as evidence,
-let the controller decide whether to continue, replay, abstain, or propose a
-new context, and measure whether that governance improves the accuracy–cost–
-forgetting trade-off.
+The follow-on competence-boundary experiment introduces an intentionally
+unidentifiable label collision and tests whether persistent contradictory
+evidence triggers rollback and abstention. See
+[`competence-boundary-experiment.md`](competence-boundary-experiment.md).

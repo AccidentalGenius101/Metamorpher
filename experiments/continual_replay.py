@@ -79,6 +79,22 @@ class TinyMLP:
         )
 
     def train(self, features: np.ndarray, labels: np.ndarray, rate: float) -> None:
+        gradients = self.gradient_vector(features, labels)
+        offset = 0
+        for parameter in (self.w1, self.b1, self.w2, self.b2):
+            size = parameter.size
+            parameter -= rate * gradients[offset : offset + size].reshape(
+                parameter.shape
+            )
+            offset += size
+
+    def gradient_vector(
+        self,
+        features: np.ndarray,
+        labels: np.ndarray,
+    ) -> np.ndarray:
+        """Return the mean-loss gradient without mutating the model."""
+
         hidden = np.tanh(features @ self.w1 + self.b1)
         logits = (hidden @ self.w2 + self.b2).reshape(-1)
         logits = np.clip(logits, -30.0, 30.0)
@@ -89,10 +105,14 @@ class TinyMLP:
         hidden_gradient = (output_gradient @ self.w2.T) * (1.0 - hidden**2)
         w1_gradient = features.T @ hidden_gradient
         b1_gradient = hidden_gradient.sum(axis=0)
-        self.w2 -= rate * w2_gradient
-        self.b2 -= rate * b2_gradient
-        self.w1 -= rate * w1_gradient
-        self.b1 -= rate * b1_gradient
+        return np.concatenate(
+            (
+                w1_gradient.reshape(-1),
+                b1_gradient.reshape(-1),
+                w2_gradient.reshape(-1),
+                b2_gradient.reshape(-1),
+            )
+        )
 
 
 class ReplayBuffer:
