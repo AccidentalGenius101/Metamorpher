@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import _support
+import _support  # noqa: F401
 
 from metamorpher import (
     DiscriminatingPrediction,
@@ -17,7 +17,6 @@ from metamorpher import (
     RepresentationStatus,
     ResidualSignature,
 )
-
 
 DOMAIN = DomainTag("trajectory")
 
