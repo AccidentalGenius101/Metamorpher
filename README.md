@@ -327,6 +327,22 @@ Reproducible experiments should record package version, seed, graph, evidence
 events, backend, and trace digest. Benchmark claims belong to a named scenario
 and configuration; they are not general safety claims.
 
+Run the synthetic hidden-dimension mechanism test with:
+
+```bash
+python -m pip install -e ".[numpy]"
+python experiments/hidden_dimension_expansion.py --seeds 100
+```
+
+The parent model receives circular phase coordinates; helix worlds introduce an
+axial displacement that the parent cannot express. The benchmark compares a
+fixed parent, an always-expanded model, and evidence-gated expansion. It also
+returns to the parent regime to measure whether scoped projection preserves the
+old behavior. This supplies the candidate missing coordinate and therefore
+tests expansion control, not autonomous ontology discovery.
+See [`docs/hidden-dimension-experiment.md`](docs/hidden-dimension-experiment.md)
+for the protocol, default result, sensitivity boundary, and limitations.
+
 ## License
 
 Apache License 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Project
