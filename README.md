@@ -351,9 +351,11 @@ python experiments/continual_replay.py --seeds 20
 ```
 
 The benchmark trains one small NumPy MLP on recurring nonlinear regions without
-a task ID and compares current-only SGD with reservoir-random and
-loss-prioritized replay under equal training compute. It is a domain-incremental
-baseline, not evidence of task discovery or end-to-end Metamorpher integration.
+a task ID and compares current-only SGD with reservoir-random,
+loss-prioritized, and evidence-gated replay. The gate probes whether a candidate
+current-only update damages retained evidence before accepting it or rolling it
+back for replay. It is a domain-incremental baseline, not evidence of task
+discovery or end-to-end Metamorpher integration.
 See [`docs/continual-replay-experiment.md`](docs/continual-replay-experiment.md).
 
 ## License
