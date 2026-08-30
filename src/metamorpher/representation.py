@@ -10,7 +10,7 @@ discriminate it.  Proposal detail never counts as evidential support.
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
