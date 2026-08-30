@@ -18,9 +18,10 @@ from typing import Any, Literal
 
 import numpy as np
 
-ReplayKind = Literal["none", "random", "prioritized"]
+ReplayKind = Literal["none", "random", "prioritized", "gated"]
 TASKS = ("ring", "xor", "wave")
 DEFAULT_SCHEDULE = ("ring", "xor", "wave", "ring", "xor", "wave")
+DEFAULT_DAMAGE_THRESHOLD = 0.01
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,11 @@ class MethodResult:
     final_average_accuracy: float
     final_worst_task_accuracy: float
     mean_forgetting: float
+    replay_batches: int
+    replay_examples: int
+    audit_examples: int
+    gradient_updates: int
+    rejected_candidate_batches: int
 
 
 class TinyMLP:
@@ -59,6 +65,17 @@ class TinyMLP:
         return -(
             labels * np.log(probabilities)
             + (1.0 - labels) * np.log(1.0 - probabilities)
+        )
+
+    def snapshot(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        return self.w1.copy(), self.b1.copy(), self.w2.copy(), self.b2.copy()
+
+    def restore(
+        self,
+        snapshot: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        self.w1, self.b1, self.w2, self.b2 = (
+            value.copy() for value in snapshot
         )
 
     def train(self, features: np.ndarray, labels: np.ndarray, rate: float) -> None:
@@ -178,10 +195,12 @@ def run_method(
     hidden: int = 24,
     learning_rate: float = 0.20,
     updates_per_batch: int = 3,
+    damage_threshold: float = DEFAULT_DAMAGE_THRESHOLD,
+    audit_batch: int = 96,
 ) -> MethodResult:
     """Train one method with identical streams, initialization, and compute."""
 
-    if method not in {"none", "random", "prioritized"}:
+    if method not in {"none", "random", "prioritized", "gated"}:
         raise ValueError(f"unknown replay method: {method}")
     if phase_samples % stream_batch:
         raise ValueError("phase samples must be divisible by stream batch")
@@ -195,6 +214,11 @@ def run_method(
     }
     phases = [make_task(data_rng, task, phase_samples) for task in schedule]
     phase_accuracy: list[tuple[float, ...]] = []
+    replay_batches = 0
+    replay_examples = 0
+    audit_examples = 0
+    gradient_updates = 0
+    rejected_candidate_batches = 0
 
     for phase in phases:
         order = data_rng.permutation(phase_samples)
@@ -203,20 +227,58 @@ def run_method(
             current_x = phase.features[indices]
             current_y = phase.labels[indices]
             replay_indices: np.ndarray | None = None
-            if method == "none" or memory.size == 0:
+            candidate_x: np.ndarray | None = None
+            candidate_y: np.ndarray | None = None
+            should_replay = method in {"random", "prioritized"} and memory.size > 0
+            if method == "gated" and memory.size > 0:
+                audit_x, audit_y, _ = memory.sample(
+                    audit_batch,
+                    prioritized=False,
+                )
+                audit_examples += len(audit_x)
+                retained_loss_before = float(np.mean(model.losses(audit_x, audit_y)))
+                candidate = model.snapshot()
+                repeated_x, repeated_y = repeat_current(
+                    current_x,
+                    current_y,
+                    replay_batch,
+                )
+                candidate_x = np.concatenate((current_x, repeated_x))
+                candidate_y = np.concatenate((current_y, repeated_y))
+                model.train(candidate_x, candidate_y, learning_rate)
+                gradient_updates += 1
+                retained_loss_after = float(np.mean(model.losses(audit_x, audit_y)))
+                relative_damage = (
+                    retained_loss_after - retained_loss_before
+                ) / max(retained_loss_before, 1e-7)
+                should_replay = relative_damage > damage_threshold
+                if should_replay:
+                    model.restore(candidate)
+                    rejected_candidate_batches += 1
+
+            if not should_replay:
                 repeats = math.ceil(replay_batch / len(current_x))
                 extra_x = np.tile(current_x, (repeats, 1))[:replay_batch]
                 extra_y = np.tile(current_y, repeats)[:replay_batch]
             else:
                 extra_x, extra_y, replay_indices = memory.sample(
                     replay_batch,
-                    prioritized=method == "prioritized",
+                    prioritized=method in {"prioritized", "gated"},
                 )
+                replay_batches += 1
+                replay_examples += replay_batch
             train_x = np.concatenate((current_x, extra_x))
             train_y = np.concatenate((current_y, extra_y))
-            for _ in range(updates_per_batch):
-                model.train(train_x, train_y, learning_rate)
-            if replay_indices is not None and method == "prioritized":
+            if method == "gated" and memory.size > 0 and not should_replay:
+                assert candidate_x is not None and candidate_y is not None
+                for _ in range(updates_per_batch - 1):
+                    model.train(candidate_x, candidate_y, learning_rate)
+                    gradient_updates += 1
+            else:
+                for _ in range(updates_per_batch):
+                    model.train(train_x, train_y, learning_rate)
+                    gradient_updates += 1
+            if replay_indices is not None and method in {"prioritized", "gated"}:
                 memory.update_priorities(
                     replay_indices,
                     model.losses(extra_x, extra_y),
@@ -241,6 +303,23 @@ def run_method(
         final_average_accuracy=statistics.fmean(final),
         final_worst_task_accuracy=min(final),
         mean_forgetting=statistics.fmean(forgetting),
+        replay_batches=replay_batches,
+        replay_examples=replay_examples,
+        audit_examples=audit_examples,
+        gradient_updates=gradient_updates,
+        rejected_candidate_batches=rejected_candidate_batches,
+    )
+
+
+def repeat_current(
+    features: np.ndarray,
+    labels: np.ndarray,
+    count: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    repeats = math.ceil(count / len(features))
+    return (
+        np.tile(features, (repeats, 1))[:count],
+        np.tile(labels, repeats)[:count],
     )
 
 
@@ -254,14 +333,18 @@ def run_benchmark(
     results = [
         run_method(seed, method, memory_capacity=memory_capacity)
         for seed in range(seeds)
-        for method in ("none", "random", "prioritized")
+        for method in ("none", "random", "prioritized", "gated")
     ]
     summary: dict[str, Any] = {}
-    for method in ("none", "random", "prioritized"):
+    for method in ("none", "random", "prioritized", "gated"):
         selected = [item for item in results if item.method == method]
         final_average = [item.final_average_accuracy for item in selected]
         final_worst = [item.final_worst_task_accuracy for item in selected]
         forgetting = [item.mean_forgetting for item in selected]
+        replay_examples = [item.replay_examples for item in selected]
+        audit_examples = [item.audit_examples for item in selected]
+        gradient_updates = [item.gradient_updates for item in selected]
+        rejected = [item.rejected_candidate_batches for item in selected]
         summary[method] = {
             "final_average_accuracy": statistics.fmean(final_average),
             "final_average_accuracy_std": statistics.pstdev(final_average),
@@ -269,6 +352,10 @@ def run_benchmark(
             "final_worst_task_accuracy_std": statistics.pstdev(final_worst),
             "mean_forgetting": statistics.fmean(forgetting),
             "mean_forgetting_std": statistics.pstdev(forgetting),
+            "replay_examples": statistics.fmean(replay_examples),
+            "audit_examples": statistics.fmean(audit_examples),
+            "gradient_updates": statistics.fmean(gradient_updates),
+            "rejected_candidate_batches": statistics.fmean(rejected),
         }
     return results, summary
 
@@ -293,6 +380,7 @@ def main() -> int:
             "memory_capacity": args.memory_capacity,
             "schedule": DEFAULT_SCHEDULE,
             "task_id_at_inference": False,
+            "gated_relative_damage_threshold": DEFAULT_DAMAGE_THRESHOLD,
         },
         "summary": summary,
     }
