@@ -23,6 +23,11 @@ around an external NumPy learner. It does not test latent-coordinate discovery,
 candidate selection, autonomous return routing, or end-to-end representational
 expansion.
 
+The follow-on
+[`decision-gated-expansion-experiment.md`](decision-gated-expansion-experiment.md)
+adds supplied action consequences and tests whether a promoted coordinate must
+also be resolved for control.
+
 ## Default result
 
 Command:

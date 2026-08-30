@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Connected evidence-gated expansion to unresolved-cell control equivalence in
+  a benchmark that separates predictive usefulness from decision-time
+  refinement necessity.
 - Added a no-task-ID neural competence-boundary benchmark with persistent local
   contradiction detection, candidate rollback, abstention, and a clearly
   privileged hidden-context oracle.
